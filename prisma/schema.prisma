@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── NextAuth Models ───────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @default("")
+  access_token      String? @default("")
+  expires_at        Int?
+  token_type        String? @default("")
+  scope             String? @default("")
+  id_token          String? @default("")
+  session_state     String? @default("")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // for Credentials provider
+
+  accounts Account[]
+  sessions Session[]
+  schemas  Schema[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Schema Management ──────────────────────────────────
+
+// Schema: A logical container/namespace for tables
+model Schema {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  status      String   @default("ACTIVE") // ACTIVE, ARCHIVED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id])
+  tables      TableDefinition[]
+  importJobs  ImportJob[]
+
+  @@unique([userId, name])
+}
+
+// ─── Table Definitions ──────────────────────────────────
+
+// TableDefinition: Metadata about a user-defined table
+model TableDefinition {
+  id              String   @id @default(cuid())
+  schemaId        String
+  logicalName     String   // Human-readable name (e.g., "商品库存")
+  physicalName    String   @unique // System-generated (mzan_tbl_<cuid>)
+  description     String?
+  headerRowNumber Int      @default(1) // Which row is the header
+  status          String   @default("DRAFT") // DRAFT, CREATED, IMPORTED, MODIFIED
+  sourceFile      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  schema                Schema              @relation(fields: [schemaId], references: [id])
+  columns               ColumnDefinition[]
+  indexes               IndexDefinition[]
+  sourceForeignKeys     ForeignKeyDefinition[] @relation("FKSourceTable")
+  targetForeignKeys     ForeignKeyDefinition[] @relation("FKTtargetTable")
+  triggers              TriggerDefinition[]
+  importJobs            ImportJob[]
+
+  @@unique([schemaId, logicalName])
+}
+
+// ─── Column Definitions ─────────────────────────────────
+
+// ColumnDefinition: Metadata about a single column in a user-defined table
+model ColumnDefinition {
+  id              String   @id @default(cuid())
+  tableId         String
+  logicalName     String   // Human-readable column name
+  physicalName    String   // Safe DB column name (e.g., "product_name")
+  dataType        String   // STRING, INTEGER, FLOAT, BOOLEAN, DATE, DATETIME, TEXT
+  dataTypeArgs    String?  // JSON: {"length":255} or {"values":["A","B"]}
+  isNullable      Boolean  @default(true)
+  isPrimaryKey    Boolean  @default(false)
+  isUnique        Boolean  @default(false)
+  defaultValue    String?
+  autoIncrement   Boolean  @default(false)
+  ordinalPosition Int      @default(0)
+  description     String?
+  checkExpression String?  // CHECK constraint (e.g., "price > 0")
+
+  // FK relationship
+  foreignKeyId    String?
+  foreignKey      ForeignKeyDefinition? @relation("FKColumns", fields: [foreignKeyId], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  table TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@unique([tableId, physicalName])
+}
+
+// ─── Index Definitions ──────────────────────────────────
+
+// IndexDefinition: Metadata about an index on a user-defined table
+model IndexDefinition {
+  id          String   @id @default(cuid())
+  tableId     String
+  indexName   String
+  columnIds   String   // JSON array of ColumnDefinition IDs
+  isUnique    Boolean  @default(false)
+  indexMethod String   @default("BTREE") // on SQLite: just BTREE
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  table TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+}
+
+// ─── Foreign Key Definitions ────────────────────────────
+
+// ForeignKeyDefinition: Metadata about a FK constraint
+model ForeignKeyDefinition {
+  id                String   @id @default(cuid())
+  tableId           String
+  constraintName    String
+  sourceColumnIds   String   // JSON array of ColumnDefinition IDs
+  referencedTableId String
+  refColumnIds      String   // JSON array of ColumnDefinition IDs
+  onDelete          String   @default("NO ACTION") // CASCADE, SET NULL, NO ACTION, RESTRICT
+  onUpdate          String   @default("NO ACTION")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  table           TableDefinition  @relation("FKSourceTable", fields: [tableId], references: [id], onDelete: Cascade)
+  referencedTable TableDefinition  @relation("FKTtargetTable", fields: [referencedTableId], references: [id])
+  sourceColumns   ColumnDefinition[] @relation("FKColumns")
+}
+
+// ─── Trigger Definitions ────────────────────────────────
+
+// TriggerDefinition: Metadata about a trigger on a user-defined table
+model TriggerDefinition {
+  id          String   @id @default(cuid())
+  tableId     String
+  triggerName String
+  timing      String   // BEFORE, AFTER, INSTEAD OF
+  event       String   // INSERT, UPDATE, DELETE
+  forEach     String   @default("ROW") // ROW, STATEMENT (SQLite only ROW)
+  logic       String   // The SQL logic
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  table TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+}
+
+// ─── Import Jobs ────────────────────────────────────────
+
+// ImportJob: Tracks the state of a spreadsheet import
+model ImportJob {
+  id            String    @id @default(cuid())
+  tableId       String?
+  schemaId      String
+  fileName      String
+  filePath      String
+  fileSize      Int
+  headerRow     Int       @default(1)
+  totalRows     Int?
+  processedRows Int?
+  errorRows     Int?
+  status        String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED
+  errorLog      String?   // JSON array of errors
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  table  TableDefinition? @relation(fields: [tableId], references: [id])
+  schema Schema          @relation(fields: [schemaId], references: [id])
+}

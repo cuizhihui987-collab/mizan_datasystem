@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(npm search *)",
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(npx next *)",
+      "mcp__ide__getDiagnostics",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(curl *)",
+      "Bash(taskkill //PID 54556 //F)",
+      "Bash(taskkill //PID 56844 //F)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(npx tsx -e ' *)",
+      "Bash(node -e ' *)",
+      "Bash(awk '{print $7}')",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
