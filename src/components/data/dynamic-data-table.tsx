@@ -51,6 +51,7 @@ import {
 import { BatchImportDialog } from "@/components/data/batch-import-dialog";
 import { FilterDialog, FilterBadges } from "@/components/data/filter-dialog";
 import { ExportWithTemplateDialog } from "@/components/schema/export-template-editor";
+import { PermissionDialog } from "@/components/data/permission-dialog";
 
 interface ColumnMeta {
   logicalName: string;
@@ -76,6 +77,8 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
     error,
     page,
     setPage,
+    pageSize,
+    setPageSize,
     sort,
     setSort,
     order,
@@ -88,8 +91,11 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
   const columns: ColumnMeta[] = data?.columns || [];
   const rows = data?.rows || [];
   const total = data?.total || 0;
-  const pageSize = data?.pageSize || 50;
   const totalPages = Math.ceil(total / pageSize);
+  const isOwner = data?.permissions?.isOwner ?? true;
+  const canInsert = data?.permissions?.canInsert ?? true;
+  const canUpdate = data?.permissions?.canUpdate ?? true;
+  const canDelete = data?.permissions?.canDelete ?? true;
 
   // Row selection
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
@@ -358,6 +364,9 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
           />
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {isOwner && (
+            <PermissionDialog tableId={tableId} tableName={data?.tableName || "数据表"} />
+          )}
           <FilterDialog
             columns={columns}
             value={filters}
@@ -365,16 +374,20 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
           />
           <ExportButton onExport={handleExport} loading={exporting} />
           {schemaId && <ExportWithTemplateDialog schemaId={schemaId} tableId={tableId} />}
-          <BatchImportDialog
-            tableId={tableId}
-            tableColumns={columns}
-            onSuccess={invalidate}
-          />
-          <AddRowDialog
-            tableId={tableId}
-            columns={columns}
-            onSuccess={invalidate}
-          />
+          {canInsert && (
+            <BatchImportDialog
+              tableId={tableId}
+              tableColumns={columns}
+              onSuccess={invalidate}
+            />
+          )}
+          {canInsert && (
+            <AddRowDialog
+              tableId={tableId}
+              columns={columns}
+              onSuccess={invalidate}
+            />
+          )}
         </div>
       </div>
 
@@ -475,11 +488,13 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
                                 : ""
                             }`}
                             onDoubleClick={() =>
-                              startEditing(
-                                rowId,
-                                col.physicalName,
-                                row[col.physicalName]
-                              )
+                              canUpdate
+                                ? startEditing(
+                                    rowId,
+                                    col.physicalName,
+                                    row[col.physicalName]
+                                  )
+                                : undefined
                             }
                           >
                             {isEditing ? (
@@ -516,30 +531,34 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
                       })}
                       <td className="p-2 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() =>
-                              startEditing(
-                                rowId,
-                                userColumns[0]?.physicalName || "",
-                                row[userColumns[0]?.physicalName || ""]
-                              )
-                            }
-                            title="编辑"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                            onClick={() => setDeleteTarget({ type: "single", id: rowId })}
-                            title="删除"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          {canUpdate && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() =>
+                                startEditing(
+                                  rowId,
+                                  userColumns[0]?.physicalName || "",
+                                  row[userColumns[0]?.physicalName || ""]
+                                )
+                              }
+                              title="编辑"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                              onClick={() => setDeleteTarget({ type: "single", id: rowId })}
+                              title="删除"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -554,9 +573,36 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
       {/* Pagination */}
       {total > 0 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <p>
-            共 {total} 条，第 {page}/{totalPages} 页
-          </p>
+          <div className="flex items-center gap-2">
+            <span>共 {total} 条</span>
+            <span className="text-muted-foreground/50">|</span>
+            <div className="flex items-center gap-1.5">
+              <span>每页</span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(v) => {
+                  setPageSize(Number(v));
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-7 w-[70px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[10, 20, 50, 100, 200].map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span>条</span>
+            </div>
+            <span className="text-muted-foreground/50">|</span>
+            <span>
+              第 {page}/{totalPages} 页
+            </span>
+          </div>
           <div className="flex items-center gap-1">
             <Button
               variant="outline"
@@ -608,21 +654,25 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
             已选择 <span className="font-bold text-foreground">{selectedRows.size}</span> 行
           </span>
           <div className="h-4 w-px bg-border" />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setBatchUpdateOpen(true)}
-          >
-            批量更新
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setDeleteTarget({ type: "batch" })}
-          >
-            <Trash2 className="h-4 w-4 mr-1" />
-            批量删除
-          </Button>
+          {canUpdate && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBatchUpdateOpen(true)}
+            >
+              批量更新
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setDeleteTarget({ type: "batch" })}
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              批量删除
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"

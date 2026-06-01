@@ -60,11 +60,18 @@ export async function POST(
 
   const { schemaId } = await params;
 
-  // Verify schema ownership
-  const schema = await prisma.schema.findFirst({
+  // Verify schema access: owner OR has any table permission in the schema
+  let schema = await prisma.schema.findFirst({
     where: { id: schemaId, userId: session.user.id },
   });
-
+  if (!schema) {
+    const hasPerm = await prisma.tablePermission.findFirst({
+      where: { userId: session.user.id, table: { schemaId } },
+    });
+    if (hasPerm) {
+      schema = await prisma.schema.findUnique({ where: { id: schemaId } });
+    }
+  }
   if (!schema) {
     return NextResponse.json({ error: "数据模型不存在" }, { status: 404 });
   }
@@ -92,22 +99,37 @@ export async function POST(
         sourceFile: parsed.data.sourceFile,
         status: "DRAFT",
         columns: {
-          create: parsed.data.columns.map((col, idx) => ({
-            logicalName: col.logicalName,
-            physicalName: col.logicalName
-              ? col.logicalName
-                  .replace(/[^\w\s一-鿿]/g, "")
-                  .replace(/([a-z])([A-Z])/g, "$1_$2")
-                  .replace(/[\s]+/g, "_")
-                  .toLowerCase()
-                  .replace(/[^\w]/g, "")
-                  .replace(/^_+|_+$/g, "") || `col_${idx + 1}`
-              : `col_${idx + 1}`,
-            dataType: col.dataType,
-            isPrimaryKey: col.isPrimaryKey,
-            isNullable: col.isNullable,
-            ordinalPosition: idx + 1,
-          })),
+          create: (() => {
+            const usedPhysNames = new Set<string>();
+            return parsed.data.columns.map((col, idx) => {
+              let phys = col.logicalName
+                ? col.logicalName
+                    .replace(/[^\w\s一-鿿]/g, "")
+                    .replace(/([a-z])([A-Z])/g, "$1_$2")
+                    .replace(/[\s]+/g, "_")
+                    .toLowerCase()
+                    .replace(/[^\w]/g, "")
+                    .replace(/^_+|_+$/g, "") || `col_${idx + 1}`
+                : `col_${idx + 1}`;
+
+              // Ensure unique: append suffix if duplicate
+              if (usedPhysNames.has(phys)) {
+                let suffix = 2;
+                while (usedPhysNames.has(`${phys}_${suffix}`)) suffix++;
+                phys = `${phys}_${suffix}`;
+              }
+              usedPhysNames.add(phys);
+
+              return {
+                logicalName: col.logicalName,
+                physicalName: phys,
+                dataType: col.dataType,
+                isPrimaryKey: col.isPrimaryKey,
+                isNullable: col.isNullable,
+                ordinalPosition: idx + 1,
+              };
+            });
+          })(),
         },
       },
       include: { columns: true },

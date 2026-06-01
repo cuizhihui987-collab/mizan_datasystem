@@ -41,6 +41,7 @@ export function ImportWizard({ schemaId }: ImportWizardProps) {
   const [fileName, setFileName] = useState("");
   const [parseData, setParseData] = useState<ParseData | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const handleUploadComplete = (id: string, name: string) => {
     setImportId(id);
@@ -63,13 +64,14 @@ export function ImportWizard({ schemaId }: ImportWizardProps) {
   ) => {
     if (!importId || !parseData) return;
     setIsCreating(true);
+    setCreateError(null);
 
-    try {
+    const createTable = async (name: string): Promise<{ id: string } | null> => {
       const res = await fetch(`/api/schemas/${schemaId}/tables`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          logicalName: tableName,
+          logicalName: name,
           headerRowNumber: 1,
           sourceFile: fileName,
           columns: columns.map((col) => ({
@@ -81,25 +83,42 @@ export function ImportWizard({ schemaId }: ImportWizardProps) {
           })),
         }),
       });
+      const data = await res.json();
+      if (res.ok) return data;
+      if (res.status === 409) return null; // name conflict
+      throw new Error(data.error || "创建失败");
+    };
 
-      const table = await res.json();
+    try {
+      // Try the original name first
+      let table = await createTable(tableName);
 
-      if (res.ok) {
-        await fetch(`/api/imports/${importId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tableId: table.id }),
-        });
-
-        setCurrentStep("done");
-        setTimeout(() => {
-          router.push(`/schemas/${schemaId}/tables/${table.id}/ddl-designer`);
-        }, 1000);
-      } else {
-        console.error("Failed to create table:", table.error);
+      // If name conflicts, auto-retry with numbered suffix
+      if (!table) {
+        for (let i = 2; i <= 100; i++) {
+          table = await createTable(`${tableName} (${i})`);
+          if (table) break;
+        }
       }
+
+      if (!table) {
+        setCreateError(`无法创建表：表名 "${tableName}" 已存在，自动重命名均失败`);
+        setIsCreating(false);
+        return;
+      }
+
+      await fetch(`/api/imports/${importId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableId: table.id }),
+      });
+
+      setCurrentStep("done");
+      setTimeout(() => {
+        router.push(`/schemas/${schemaId}/tables/${table.id}/ddl-designer`);
+      }, 1000);
     } catch (err) {
-      console.error("Failed to create table:", err);
+      setCreateError(err instanceof Error ? err.message : "创建表失败");
     } finally {
       setIsCreating(false);
     }
@@ -162,13 +181,22 @@ export function ImportWizard({ schemaId }: ImportWizardProps) {
             />
           )}
           {currentStep === "mapping" && parseData && (
-            <StepColumnMapping
-              headers={parseData.headers}
-              suggestedTypes={parseData.suggestedTypes}
-              onConfirm={handleMappingConfirm}
-              onBack={() => setCurrentStep("parse")}
-              defaultTableName={parseData.headers[0] || "未命名表"}
-            />
+            <>
+              {createError && (
+                <Card className="border-destructive bg-destructive/10">
+                  <CardContent className="p-3 text-sm text-destructive">
+                    {createError}
+                  </CardContent>
+                </Card>
+              )}
+              <StepColumnMapping
+                headers={parseData.headers}
+                suggestedTypes={parseData.suggestedTypes}
+                onConfirm={handleMappingConfirm}
+                onBack={() => setCurrentStep("parse")}
+                defaultTableName={parseData.headers[0] || "未命名表"}
+              />
+            </>
           )}
           {currentStep === "done" && (
             <div className="py-12 text-center space-y-4">

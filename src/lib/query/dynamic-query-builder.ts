@@ -15,6 +15,7 @@ export interface QueryOptions {
   sort?: string;
   order?: "asc" | "desc";
   filters?: FilterGroup;
+  columns?: string[];  // If provided, SELECT only these columns instead of *
 }
 
 function escapeVal(v: unknown): string {
@@ -43,7 +44,10 @@ export class DynamicQueryBuilder {
       orderSQL = `ORDER BY "${sanitizedSort}" ${dir}`;
     }
 
-    const dataSQL = `SELECT * FROM ${tableRef} ${whereSQL} ${orderSQL} LIMIT ${pageSize} OFFSET ${offset}`;
+    const selectCols = options.columns && options.columns.length > 0
+      ? options.columns.map((c) => `"${c.replace(/[^a-z0-9_一-鿿]/gi, "")}"`).join(", ")
+      : "*";
+    const dataSQL = `SELECT ${selectCols} FROM ${tableRef} ${whereSQL} ${orderSQL} LIMIT ${pageSize} OFFSET ${offset}`;
     const countSQL = `SELECT COUNT(*) as total FROM ${tableRef} ${whereSQL}`;
 
     return {

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import Busboy from "busboy";
+import { Readable } from "stream";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -56,7 +57,6 @@ export async function POST(req: Request) {
           return;
         }
 
-        // Validate file type
         const ext = path.extname(filename).toLowerCase();
         if (![".xlsx", ".xls", ".csv"].includes(ext)) {
           stream.resume();
@@ -101,35 +101,34 @@ export async function POST(req: Request) {
         reject(err);
       });
 
-      // Pipe the request body through busboy
-      const bodyReader = req.body?.getReader();
-      if (!bodyReader) {
+      // Convert Web ReadableStream to Node.js Readable and pipe to busboy
+      const webStream = req.body;
+      if (!webStream) {
         reject(new Error("无法读取请求体"));
         return;
       }
 
-      const pump = async () => {
-        try {
-          while (true) {
-            const { done, value } = await bodyReader.read();
-            if (done) {
-              busboy.end();
-              break;
-            }
-            busboy.write(Buffer.from(value));
-          }
-        } catch (err) {
-          busboy.destroy();
-          reject(err);
-        }
-      };
-      pump();
+      const nodeStream = Readable.fromWeb(webStream as import("stream/web").ReadableStream);
+      nodeStream.on("error", (err) => reject(err));
+      nodeStream.pipe(busboy);
     });
 
-    // Verify schema ownership
-    const schema = await prisma.schema.findFirst({
+    // Verify schema access: owner OR has any table permission in the schema
+    let schema = await prisma.schema.findFirst({
       where: { id: result.schemaId, userId: session.user.id },
     });
+    if (!schema) {
+      // Check if user has any table-level permission on tables in this schema
+      const hasPerm = await prisma.tablePermission.findFirst({
+        where: {
+          userId: session.user.id,
+          table: { schemaId: result.schemaId },
+        },
+      });
+      if (hasPerm) {
+        schema = await prisma.schema.findUnique({ where: { id: result.schemaId } });
+      }
+    }
     if (!schema) {
       return NextResponse.json(
         { error: "数据模型不存在" },
@@ -137,12 +136,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Save file to disk
     const uniqueName = `${Date.now()}-${result.file.name}`;
     const filePath = path.join(uploadDir, uniqueName);
     await writeFile(filePath, result.file.buffer);
 
-    // Create import job record
     const importJob = await prisma.importJob.create({
       data: {
         schemaId: result.schemaId,

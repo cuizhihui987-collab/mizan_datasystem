@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth-options";
 import { prisma } from "@/lib/db/prisma";
+import { canAccessTable } from "@/lib/auth/permissions";
 import { z } from "zod";
 
 const batchImportSchema = z.object({
@@ -30,6 +31,10 @@ export async function POST(
   }
 
   try {
+    if (!(await canAccessTable(tableId, session.user.id, "insert"))) {
+      return NextResponse.json({ error: "无权批量导入" }, { status: 403 });
+    }
+
     const body = await req.json();
     const parsed = batchImportSchema.safeParse(body);
 

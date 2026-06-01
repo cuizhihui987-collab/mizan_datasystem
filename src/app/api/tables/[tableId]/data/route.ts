@@ -6,6 +6,7 @@ import {
   DynamicQueryBuilder,
   type FilterGroup,
 } from "@/lib/query/dynamic-query-builder";
+import { getReadableColumnsMap, getWritableColumnsMap, canAccessTable, getTablePermission } from "@/lib/auth/permissions";
 
 export async function GET(
   req: Request,
@@ -43,6 +44,17 @@ export async function GET(
   const filterParam = searchParams.get("filters");
 
   try {
+    // Permission check
+    if (!(await canAccessTable(tableId, session.user.id, "select"))) {
+      return NextResponse.json({ error: "无权查询该表" }, { status: 403 });
+    }
+
+    // Column-level read filter
+    const readableMap = await getReadableColumnsMap(tableId, session.user.id);
+    const allowedColumns = readableMap === null
+      ? undefined
+      : table.columns.filter((c) => readableMap[c.physicalName] !== false).map((c) => c.physicalName);
+
     const queryBuilder = new DynamicQueryBuilder(table.physicalName);
     let filterGroup: FilterGroup | undefined;
 
@@ -102,6 +114,7 @@ export async function GET(
       sort,
       order,
       filters: filterGroup,
+      columns: allowedColumns,
     });
 
     // Execute both queries as a batch
@@ -117,8 +130,15 @@ export async function GET(
     const countResult = results.find((r) => r && typeof r === "object" && "total" in r);
     const totalCount = countResult ? Number((countResult as Record<string, unknown>).total) : 0;
 
+    const visibleColumns = allowedColumns
+      ? table.columns.filter((c) => allowedColumns.includes(c.physicalName))
+      : table.columns;
+
+    const perm = await getTablePermission(tableId, session.user.id);
+
     return NextResponse.json({
-      columns: table.columns.map((c) => ({
+      tableName: table.logicalName,
+      columns: visibleColumns.map((c) => ({
         logicalName: c.logicalName,
         physicalName: c.physicalName,
         dataType: c.dataType,
@@ -127,6 +147,12 @@ export async function GET(
       total: totalCount,
       page,
       pageSize,
+      permissions: {
+        isOwner: perm.isOwner,
+        canInsert: perm.canInsert,
+        canUpdate: perm.canUpdate,
+        canDelete: perm.canDelete,
+      },
     });
   } catch (error) {
     console.error("Query error:", error);
@@ -169,9 +195,22 @@ export async function POST(
   }
 
   try {
+    if (!(await canAccessTable(tableId, session.user.id, "insert"))) {
+      return NextResponse.json({ error: "无权插入数据" }, { status: 403 });
+    }
+
     const body = await req.json();
+
+    // Filter to writable columns only
+    const writableMap = await getWritableColumnsMap(tableId, session.user.id);
+    const filteredBody = writableMap === null
+      ? body
+      : Object.fromEntries(
+          Object.entries(body).filter(([key]) => writableMap[key] !== false)
+        );
+
     const queryBuilder = new DynamicQueryBuilder(table.physicalName);
-    const { sql } = queryBuilder.buildInsertQuery(body);
+    const { sql } = queryBuilder.buildInsertQuery(filteredBody);
 
     await prisma.$executeRawUnsafe(sql);
 
@@ -209,6 +248,10 @@ export async function PUT(
   }
 
   try {
+    if (!(await canAccessTable(tableId, session.user.id, "update"))) {
+      return NextResponse.json({ error: "无权更新数据" }, { status: 403 });
+    }
+
     const body = await req.json();
     const queryBuilder = new DynamicQueryBuilder(table.physicalName);
 
@@ -280,6 +323,10 @@ export async function DELETE(
   }
 
   try {
+    if (!(await canAccessTable(tableId, session.user.id, "delete"))) {
+      return NextResponse.json({ error: "无权删除数据" }, { status: 403 });
+    }
+
     const body = await req.json();
 
     // Batch delete: { ids: number[] }

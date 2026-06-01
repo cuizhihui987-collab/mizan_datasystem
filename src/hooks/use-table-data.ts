@@ -4,7 +4,7 @@ import type { FilterGroup } from "@/lib/query/dynamic-query-builder";
 
 export function useTableData(tableId: string | undefined) {
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState<string | undefined>();
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [search, setSearch] = useState("");
@@ -38,6 +38,8 @@ export function useTableData(tableId: string | undefined) {
     ...query,
     page,
     setPage,
+    pageSize,
+    setPageSize,
     sort,
     setSort: (col: string) => {
       if (sort === col) {

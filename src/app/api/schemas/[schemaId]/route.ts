@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth-options";
 import { prisma } from "@/lib/db/prisma";
+import { isAdmin } from "@/lib/auth/permissions";
 
 export async function GET(
   req: Request,
@@ -15,7 +16,7 @@ export async function GET(
   const { schemaId } = await params;
 
   const schema = await prisma.schema.findFirst({
-    where: { id: schemaId, userId: session.user.id },
+    where: (await isAdmin(session.user.id)) ? { id: schemaId } : { id: schemaId, userId: session.user.id },
     include: {
       tables: {
         include: { _count: { select: { columns: true } } },

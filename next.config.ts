@@ -5,8 +5,8 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "50mb",
     },
+    middlewareClientMaxBodySize: "50mb",
   },
-  // Allow large file uploads
   serverExternalPackages: ["xlsx"],
 };
 

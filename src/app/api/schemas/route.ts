@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth-options";
 import { prisma } from "@/lib/db/prisma";
+import { isAdmin } from "@/lib/auth/permissions";
 import { z } from "zod";
 
 const createSchemaSchema = z.object({
@@ -16,7 +17,7 @@ export async function GET() {
   }
 
   const schemas = await prisma.schema.findMany({
-    where: { userId: session.user.id, status: "ACTIVE" },
+    where: (await isAdmin(session.user.id)) ? { status: "ACTIVE" } : { userId: session.user.id, status: "ACTIVE" },
     orderBy: { updatedAt: "desc" },
     include: { _count: { select: { tables: true } } },
   });

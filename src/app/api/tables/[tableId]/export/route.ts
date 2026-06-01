@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth-options";
 import { prisma } from "@/lib/db/prisma";
+import { canAccessTable, getReadableColumnsMap } from "@/lib/auth/permissions";
 import * as XLSX from "xlsx";
 
 export async function GET(
@@ -24,6 +25,19 @@ export async function GET(
     return NextResponse.json({ error: "表不可用" }, { status: 400 });
   }
 
+  if (!(await canAccessTable(tableId, session.user.id, "select"))) {
+    return NextResponse.json({ error: "无权导出该表" }, { status: 403 });
+  }
+
+  // Column-level read filter
+  const readableMap = await getReadableColumnsMap(tableId, session.user.id);
+  const userColumns = table.columns.filter(
+    (c) => !["_id", "_created_at", "_updated_at"].includes(c.physicalName)
+  );
+  const visibleColumns = readableMap === null
+    ? userColumns
+    : userColumns.filter((c) => readableMap[c.physicalName] !== false);
+
   const { searchParams } = new URL(req.url);
   const format = searchParams.get("format") || "xlsx";
 
@@ -33,18 +47,14 @@ export async function GET(
       `SELECT * FROM "${table.physicalName}" ORDER BY "_id" ASC`
     );
 
-    const userColumns = table.columns.filter(
-      (c) => !["_id", "_created_at", "_updated_at"].includes(c.physicalName)
-    );
-
     // Build header row with logical names
-    const headers = userColumns.map((c) => c.logicalName);
+    const headers = visibleColumns.map((c) => c.logicalName);
 
     // Map data rows: use logical names as keys
     const exportData = allRows.map((row) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const mapped: Record<string, any> = {};
-      for (const col of userColumns) {
+      for (const col of visibleColumns) {
         const val = row[col.physicalName];
         if (col.dataType === "BOOLEAN") {
           mapped[col.logicalName] =

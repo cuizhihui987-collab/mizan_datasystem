@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth-options";
 import { prisma } from "@/lib/db/prisma";
+import { isAdmin } from "@/lib/auth/permissions";
 import { z } from "zod";
 
 const executeDDLSchema = z.object({
@@ -25,7 +26,7 @@ export async function POST(
   const { tableId } = await params;
 
   const table = await prisma.tableDefinition.findFirst({
-    where: { id: tableId, schema: { userId: session.user.id } },
+    where: (await isAdmin(session.user.id)) ? { id: tableId } : { id: tableId, schema: { userId: session.user.id } },
     include: { columns: true },
   });
 

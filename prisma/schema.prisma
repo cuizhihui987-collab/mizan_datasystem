@@ -43,10 +43,12 @@ model User {
   emailVerified DateTime?
   image         String?
   password      String?   // for Credentials provider
+  role          String    @default("USER") // USER, ADMIN
 
   accounts Account[]
   sessions Session[]
   schemas  Schema[]
+  tablePermissions TablePermission[]
 }
 
 model VerificationToken {
@@ -101,6 +103,7 @@ model TableDefinition {
   targetForeignKeys     ForeignKeyDefinition[] @relation("FKTtargetTable")
   triggers              TriggerDefinition[]
   importJobs            ImportJob[]
+  tablePermissions      TablePermission[]
 
   @@unique([schemaId, logicalName])
 }
@@ -132,6 +135,7 @@ model ColumnDefinition {
   updatedAt       DateTime @updatedAt
 
   table TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  columnPermissions ColumnPermission[]
 
   @@unique([tableId, physicalName])
 }
@@ -265,4 +269,40 @@ model ImportJob {
 
   table  TableDefinition? @relation(fields: [tableId], references: [id])
   schema Schema          @relation(fields: [schemaId], references: [id])
+}
+
+// ─── Permissions ──────────────────────────────────────
+
+// TablePermission: Grants a user access to a table with specific action flags
+model TablePermission {
+  id        String   @id @default(cuid())
+  tableId   String
+  table     TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  canSelect Boolean  @default(true)
+  canInsert Boolean  @default(true)
+  canUpdate Boolean  @default(true)
+  canDelete Boolean  @default(false)
+
+  columnPermissions ColumnPermission[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tableId, userId])
+}
+
+// ColumnPermission: Restricts read/write access to specific columns within a table permission
+model ColumnPermission {
+  id                String   @id @default(cuid())
+  tablePermissionId String
+  tablePermission   TablePermission @relation(fields: [tablePermissionId], references: [id], onDelete: Cascade)
+  columnId          String
+  column            ColumnDefinition @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  canRead   Boolean  @default(true)
+  canWrite  Boolean  @default(true)
+
+  @@unique([tablePermissionId, columnId])
 }

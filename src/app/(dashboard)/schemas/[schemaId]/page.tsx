@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Plus, Table, Trash2, FileSpreadsheet, BarChart3, Eye, Terminal, FileDown } from "lucide-react";
+import { ArrowLeft, Plus, Table, Trash2, FileSpreadsheet, BarChart3, Eye, Terminal, FileDown, BookOpen } from "lucide-react";
 import { ViewEditor } from "@/components/schema/view-editor";
 import { ScriptEditor } from "@/components/schema/script-editor";
 import { ExportTemplateEditor } from "@/components/schema/export-template-editor";
@@ -36,7 +36,14 @@ export default function SchemaDetailPage() {
 
   const { data: schema, isLoading } = useQuery<SchemaDetail>({
     queryKey: ["schema", params.schemaId],
-    queryFn: () => fetch(`/api/schemas/${params.schemaId}`).then((r) => r.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/schemas/${params.schemaId}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "请求失败" }));
+        throw new Error(err.error || "数据模型不存在");
+      }
+      return res.json();
+    },
   });
 
   const deleteTableMutation = useMutation({
@@ -124,6 +131,10 @@ export default function SchemaDetailPage() {
             <FileDown className="h-3.5 w-3.5 mr-1" />
             导出模板
           </TabsTrigger>
+          <TabsTrigger value="api-docs">
+            <BookOpen className="h-3.5 w-3.5 mr-1" />
+            API 文档
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="tables" className="space-y-4">
           <div className="flex justify-end">
@@ -208,6 +219,20 @@ export default function SchemaDetailPage() {
         </TabsContent>
         <TabsContent value="templates" className="space-y-4">
           <ExportTemplateEditor schemaId={params.schemaId as string} />
+        </TabsContent>
+        <TabsContent value="api-docs" className="space-y-4">
+          <Card>
+            <CardContent className="py-12 text-center">
+              <BookOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground mb-4">查看基于表结构自动生成的 RESTful API 文档</p>
+              <Button asChild>
+                <Link href={`/schemas/${params.schemaId}/api-docs`}>
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  查看 API 文档
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

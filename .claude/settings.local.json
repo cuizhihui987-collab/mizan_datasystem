@@ -33,7 +33,23 @@
       "Bash(sqlite3 prisma/dev.db ' *)",
       "Bash(sqlite3 prisma/dev.db \".tables\")",
       "Bash(node -e \"const l = require\\('lucide-react'\\); console.log\\('Eye:', !!l.Eye, 'Terminal:', !!l.Terminal\\);\")",
-      "Bash(sqlite3 prisma/dev.db \"SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'mzan_tbl_%';\")"
+      "Bash(sqlite3 prisma/dev.db \"SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'mzan_tbl_%';\")",
+      "Bash(taskkill -f -im node.exe)",
+      "Bash(rm -f node_modules/.prisma/client/*.tmp*)",
+      "Bash(gh auth *)",
+      "Bash(gh --version)",
+      "Bash(gh --help)",
+      "Bash(npm uninstall *)",
+      "Bash(git credential-manager *)",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(f'Created: {d.get\\(\\\\\"html_url\\\\\",\\\\\"FAILED\\\\\"\\)}'\\)\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(d.get\\('html_url','ERROR: '+d.get\\('message',''\\)\\)\\)\")",
+      "Bash(node *)",
+      "Bash(npx tsc *)",
+      "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"是，清空并迁移\" npx prisma migrate reset --force)",
+      "Bash(sqlite3 prisma/dev.db \"SELECT id, name, email FROM User;\")",
+      "Bash(sqlite3 prisma/dev.db \".schema TablePermission\")",
+      "Bash(sqlite3 prisma/dev.db \".schema ColumnPermission\")",
+      "Bash(sqlite3 prisma/dev.db \"SELECT id, name FROM Schema;\")"
     ]
   },
   "enabledMcpjsonServers": [
