@@ -81,7 +81,7 @@ export async function GET(
       return new NextResponse(csvContent, {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="${encodeURIComponent(table.logicalName)}.csv"`,
+          "Content-Disposition": `attachment; filename="export.csv"; filename*=UTF-8''${encodeURIComponent(table.logicalName)}.csv`,
         },
       });
     }
@@ -108,7 +108,7 @@ export async function GET(
       headers: {
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(table.logicalName)}.xlsx"`,
+        "Content-Disposition": `attachment; filename="export.xlsx"; filename*=UTF-8''${encodeURIComponent(table.logicalName)}.xlsx`,
       },
     });
   } catch (error) {

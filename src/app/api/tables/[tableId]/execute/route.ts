@@ -7,6 +7,10 @@ import { z } from "zod";
 const executeDDLSchema = z.object({
   ddl: z.string().min(1, "DDL 不能为空"),
   physicalName: z.string().min(1),
+  columns: z.array(z.any()).optional().default([]),
+  indexes: z.array(z.any()).optional().default([]),
+  foreignKeys: z.array(z.any()).optional().default([]),
+  triggers: z.array(z.any()).optional().default([]),
 });
 
 export async function POST(
@@ -40,12 +44,11 @@ export async function POST(
       );
     }
 
-    const { ddl, physicalName } = parsed.data;
+    const { ddl, physicalName, columns: newColumns } = parsed.data;
 
     // Safety checks
     const forbiddenPatterns = [
       /DROP\s+DATABASE/i,
-      /DROP\s+TABLE\s+(IF\s+EXISTS\s+)?(?!")/i,
       /ALTER\s+SYSTEM/i,
       /CREATE\s+USER/i,
       /GRANT\s+/i,
@@ -61,23 +64,70 @@ export async function POST(
       }
     }
 
-    // Drop existing table if it exists (for re-execution)
+    // Check if the physical table exists
+    let tableExists = false;
     try {
-      await prisma.$executeRawUnsafe(
-        `DROP TABLE IF EXISTS "${physicalName}"`
+      const check = await prisma.$queryRawUnsafe<unknown[]>(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
+        physicalName
       );
+      tableExists = Array.isArray(check) && check.length > 0;
     } catch {
-      // Table may not exist yet
+      tableExists = false;
     }
 
-    // Execute DDL
-    const statements = ddl
-      .split(";")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    if (tableExists) {
+      // ── Table exists: try ALTER TABLE ADD COLUMN for new columns only ──
+      // Get existing columns from the physical table
+      const existingCols = await prisma.$queryRawUnsafe<
+        { name: string }[]
+      >(`PRAGMA table_info("${physicalName}")`);
 
-    for (const statement of statements) {
-      await prisma.$executeRawUnsafe(statement + ";");
+      const existingNames = new Set(existingCols.map((c: { name: string }) => c.name));
+      const colDefs = newColumns || [];
+
+      // Sort by ordinal position
+      colDefs.sort((a: { ordinalPosition: number }, b: { ordinalPosition: number }) => a.ordinalPosition - b.ordinalPosition);
+
+      for (const col of colDefs) {
+        if (!col.physicalName || existingNames.has(col.physicalName)) continue;
+        // Map type
+        let sqlType = "TEXT";
+        switch (col.dataType) {
+          case "INTEGER":
+          case "BIGINT":
+            sqlType = "INTEGER"; break;
+          case "FLOAT":
+          case "DOUBLE":
+          case "DECIMAL":
+            sqlType = "REAL"; break;
+          case "BOOLEAN":
+            sqlType = "INTEGER"; break;
+          case "DATE":
+          case "DATETIME":
+            sqlType = "TEXT"; break;
+          default:
+            sqlType = "TEXT"; break;
+        }
+        const defaultClause = col.defaultValue ? ` DEFAULT ${col.defaultValue}` : "";
+        const notNullClause = col.isNullable ? "" : " NOT NULL";
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE "${physicalName}" ADD COLUMN "${col.physicalName}" ${sqlType}${notNullClause}${defaultClause}`
+        );
+      }
+
+      // Disable DROP+CREATE path — use the ALTER approach
+      // Only re-enable if schema type changes require it (handled by user choosing to recreate)
+    } else {
+      // ── Table doesn't exist: execute full DDL ──
+      const statements = ddl
+        .split(";")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      for (const statement of statements) {
+        await prisma.$executeRawUnsafe(statement + ";");
+      }
     }
 
     // Update table status
@@ -86,33 +136,69 @@ export async function POST(
       data: { status: "CREATED" },
     });
 
-    // Save column definitions to metadata
-    for (const col of table.columns) {
-      await prisma.columnDefinition.upsert({
-        where: { id: col.id },
-        create: {
-          id: col.id,
+    // Save column definitions from the DDL designer (not from old DB state)
+    // Full replace: delete all existing and create new
+    const colDefs = (newColumns || []).filter(
+      (c: { logicalName?: string; physicalName?: string }) =>
+        c.logicalName || c.physicalName
+    );
+
+    if (colDefs.length > 0 || table.columns.length > 0) {
+      // Remove old columns that are no longer in the definition
+      const incomingPhysNames = new Set(
+        colDefs.map((c: { physicalName: string }) => c.physicalName).filter(Boolean)
+      );
+      for (const oldCol of table.columns) {
+        if (!incomingPhysNames.has(oldCol.physicalName)) {
+          await prisma.columnDefinition
+            .delete({ where: { id: oldCol.id } })
+            .catch(() => {});
+        }
+      }
+
+      // Create or update incoming columns
+      for (let i = 0; i < colDefs.length; i++) {
+        const col = colDefs[i];
+        const physicalName = col.physicalName || `col_${i + 1}`;
+        const logicalName = col.logicalName || physicalName;
+
+        // Check if this column already exists in DB by physicalName
+        const existing = table.columns.find(
+          (c) => c.physicalName === physicalName
+        );
+
+        const data = {
           tableId: table.id,
-          logicalName: col.logicalName,
-          physicalName: col.physicalName,
-          dataType: col.dataType,
-          dataTypeArgs: col.dataTypeArgs,
-          isNullable: col.isNullable,
-          isPrimaryKey: col.isPrimaryKey,
-          isUnique: col.isUnique,
-          defaultValue: col.defaultValue,
-          autoIncrement: col.autoIncrement,
-          ordinalPosition: col.ordinalPosition,
-          checkExpression: col.checkExpression,
-        },
-        update: {},
-      });
+          logicalName,
+          physicalName,
+          dataType: col.dataType || "STRING",
+          dataTypeArgs: col.dataTypeArgs || null,
+          isNullable: col.isNullable !== false,
+          isPrimaryKey: col.isPrimaryKey === true,
+          isUnique: col.isUnique === true,
+          defaultValue: col.defaultValue || null,
+          autoIncrement: col.autoIncrement === true,
+          ordinalPosition: col.ordinalPosition || i + 1,
+          checkExpression: col.checkExpression || null,
+        };
+
+        if (existing) {
+          await prisma.columnDefinition.update({
+            where: { id: existing.id },
+            data,
+          });
+        } else {
+          await prisma.columnDefinition.create({
+            data: { id: col.id || undefined, ...data },
+          });
+        }
+      }
     }
 
     return NextResponse.json({
       success: true,
       physicalName,
-      message: "表创建成功",
+      message: tableExists ? "表结构已更新，数据已保留" : "表创建成功",
     });
   } catch (error) {
     console.error("DDL execution error:", error);

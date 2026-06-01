@@ -73,6 +73,7 @@ model Schema {
   tables      TableDefinition[]
   views       ViewDefinition[]
   scripts     CustomScript[]
+  templates   ExportTemplate[]
   importJobs  ImportJob[]
 
   @@unique([userId, name])
@@ -222,6 +223,23 @@ model CustomScript {
   schema Schema @relation(fields: [schemaId], references: [id], onDelete: Cascade)
 
   @@unique([schemaId, scriptName])
+}
+
+// ─── Export Templates ──────────────────────────────────
+
+// ExportTemplate: Saved export configuration for data export
+model ExportTemplate {
+  id          String   @id @default(cuid())
+  schemaId    String
+  templateName String
+  config      String   // JSON: { format, filePattern, columns[], filters, sort }
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schema Schema @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+
+  @@unique([schemaId, templateName])
 }
 
 // ─── Import Jobs ────────────────────────────────────────

@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Plus, Table, Trash2, FileSpreadsheet, BarChart3, Eye, Terminal } from "lucide-react";
+import { ArrowLeft, Plus, Table, Trash2, FileSpreadsheet, BarChart3, Eye, Terminal, FileDown } from "lucide-react";
 import { ViewEditor } from "@/components/schema/view-editor";
 import { ScriptEditor } from "@/components/schema/script-editor";
+import { ExportTemplateEditor } from "@/components/schema/export-template-editor";
 import Link from "next/link";
 
 interface TableDef {
@@ -119,6 +120,10 @@ export default function SchemaDetailPage() {
             <Terminal className="h-3.5 w-3.5 mr-1" />
             脚本
           </TabsTrigger>
+          <TabsTrigger value="templates">
+            <FileDown className="h-3.5 w-3.5 mr-1" />
+            导出模板
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="tables" className="space-y-4">
           <div className="flex justify-end">
@@ -200,6 +205,9 @@ export default function SchemaDetailPage() {
         </TabsContent>
         <TabsContent value="scripts" className="space-y-4">
           <ScriptEditor schemaId={params.schemaId as string} />
+        </TabsContent>
+        <TabsContent value="templates" className="space-y-4">
+          <ExportTemplateEditor schemaId={params.schemaId as string} />
         </TabsContent>
       </Tabs>
     </div>

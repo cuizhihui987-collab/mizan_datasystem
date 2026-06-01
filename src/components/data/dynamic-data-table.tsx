@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTableData } from "@/hooks/use-table-data";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,7 @@ import {
 
 import { BatchImportDialog } from "@/components/data/batch-import-dialog";
 import { FilterDialog, FilterBadges } from "@/components/data/filter-dialog";
+import { ExportWithTemplateDialog } from "@/components/schema/export-template-editor";
 
 interface ColumnMeta {
   logicalName: string;
@@ -63,6 +64,12 @@ interface DynamicDataTableProps {
 
 export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
   const queryClient = useQueryClient();
+  const schemaId = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const parts = window.location.pathname.split("/");
+    const idx = parts.indexOf("schemas");
+    return idx !== -1 ? parts[idx + 1] : "";
+  }, []);
   const {
     data,
     isLoading,
@@ -357,6 +364,7 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
             onChange={setFilters}
           />
           <ExportButton onExport={handleExport} loading={exporting} />
+          {schemaId && <ExportWithTemplateDialog schemaId={schemaId} tableId={tableId} />}
           <BatchImportDialog
             tableId={tableId}
             tableColumns={columns}

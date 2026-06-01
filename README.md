@@ -339,6 +339,38 @@ npm run dev
 
 - `sonner` — Toast 通知库
 
+### Session 3 — DDL 执行优化、导出模板增强
+
+#### 修复的 Bug
+
+| 问题 | 原因 | 修复 |
+|------|------|------|
+| DDL 执行导致数据丢失 | 每次执行 DROP TABLE + CREATE TABLE，销毁所有数据 | 物理表存在时改用 `ALTER TABLE ADD COLUMN` 追加新字段，保留数据 |
+| DDL 新增字段不显示 | API 只保存执行前从 DB 读取的旧字段元数据，新增字段未被持久化 | 将完整列定义从设计器发送到 API，全量替换元数据 |
+| 按模板导出 `{col:仓库名称}` 未识别 | 变量解析只查物理名，用户输入的是逻辑名 | 同时匹配物理名和逻辑名 |
+| 导出文件名未使用自定义模板 | `Content-Disposition` 使用非标准编码，浏览器降级为默认名 | 改为 RFC 5987 标准格式 `filename*=UTF-8''` |
+
+#### 新增功能
+
+| 功能 | 文件 | 说明 |
+|------|------|------|
+| **导出模板样式配置** | `export-template-editor.tsx` | 表头位置（顶部/左侧）、公司 Logo 上传（base64 存储）、工作表名自定义 |
+| **导出文件名字段变量** | `export/route.ts` | `{col:字段名}` 变量从数据第一行取值，支持物理名和逻辑名 |
+| **导出数据源选择** | `export-template-editor.tsx` | 导出向导可选任意数据表，不再限定当前表 |
+| **导出数据筛选** | `export/route.ts` + `export-template-editor.tsx` | 导出前可按 11 种操作符过滤数据 |
+| **exceljs 集成** | `export/route.ts` | 替代 xlsx 生成 Excel，支持样式（字体/填充/边框）、图片嵌入、自动筛选 |
+| **DDL 智能执行** | `execute/route.ts` | 物理表存在时自动检测并 ALTER TABLE ADD COLUMN，保留数据 |
+
+#### 修改文件
+
+| 文件 | 改动 |
+|------|------|
+| `src/app/api/tables/[tableId]/execute/route.ts` | 重写：ALTER TABLE 替代 DROP+CREATE，全量替换列元数据 |
+| `src/components/ddl-designer/index.tsx` | DDL 执行请求增加 columns/indexes/foreignKeys/triggers 完整定义 |
+| `src/app/api/schemas/[schemaId]/templates/[templateId]/export/route.ts` | 改用 exceljs 生成 Excel，`{col:xxx}` 双名匹配，RFC 5987 文件名编码 |
+| `src/components/schema/export-template-editor.tsx` | 新增样式配置、Logo 上传、数据源选择、筛选面板 |
+| `src/app/api/tables/[tableId]/export/route.ts` | Content-Disposition 改为 RFC 5987 标准 |
+
 ---
 
 ## 后续优化计划
@@ -347,7 +379,7 @@ npm run dev
 
 - [ ] **注册验证码**：增加邮箱验证码或图形验证码
 - [ ] **DDL 版本管理**：每次 DDL 执行保存版本历史，支持回滚
-- [ ] **设定模版**: 按照数据模型，自定义高自由的导出模板，可以添加图片，导出类型等，并且可以对模板进行修改和保存
+- [ ] **设定导出模版**: 按照数据模型数据源，自定义高自由的导出模板，导出路径和名称，可以添加图片，导出类型等，并且可以对模板进行修改和保存，之后选择数据愿支持按照模板导出
 
 ### 中期规划
 

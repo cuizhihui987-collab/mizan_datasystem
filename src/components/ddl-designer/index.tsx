@@ -173,6 +173,10 @@ export function DDLDesigner({ schemaId, tableId }: DDLDesignerProps) {
         body: JSON.stringify({
           ddl,
           physicalName: store.tablePhysicalName,
+          columns: def.columns,
+          indexes: def.indexes,
+          foreignKeys: def.foreignKeys,
+          triggers: def.triggers,
         }),
       });
 
