@@ -88,11 +88,26 @@
 - Schema 级操作：创建、编辑、删除（含级联删除关联数据）
 - 仪表盘概览：Schema 数量、数据表数量、导入任务统计
 
-### 10. 用户认证
+### 10. 权限管理
+
+- **表级权限**：SELECT（查询）、INSERT（新增）、UPDATE（更新）、DELETE（删除）四种操作独立控制
+- **列级权限**：在表权限内进一步限制 READ（读取）、WRITE（写入）权限
+- **Schema Owner** 自动拥有全部权限，无需额外配置
+- **其他用户**：Owner 可通过"权限管理"对话框为其他用户分配表/列权限
+- **超级管理员**：`role: ADMIN` 的用户可访问和操作所有数据，管理所有权限
+
+### 11. 自动 API 文档
+
+- 基于数据表结构自动生成 RESTful API 文档
+- 包含所有 CRUD 端点的路径、参数、请求体示例和 cURL 示例
+- 在 Schema 详情页"API 文档"标签页查看
+
+### 12. 用户认证
 
 - 邮箱/密码注册与登录
 - 基于 NextAuth.js + JWT 的凭证认证
 - 路由保护：未登录自动跳转登录页
+- **超级管理员**：`role: ADMIN` 可访问所有 Schema 和数据，管理全部权限
 
 ---
 
@@ -173,6 +188,8 @@
 - `ViewDefinition` — 视图定义（SQL 查询、状态）
 - `CustomScript` — 自定义脚本（SQL 脚本、描述）
 - `ImportJob` — 导入任务记录
+- `TablePermission` — 表级权限（用户-表：SELECT/INSERT/UPDATE/DELETE）
+- `ColumnPermission` — 列级权限（表权限内的列级 READ/WRITE 控制）
 
 **数据层**（运行时动态创建的物理表）：
 
@@ -189,6 +206,7 @@
 - **分块批量导入**：大数据量导入时分块（每块 500 行）发送，避免请求体超限
 - **物理表缺失自愈**：物理表被误删时自动回退状态为草稿，引导用户重建
 - **查询安全**：视图和脚本执行均有安全校验，拦截危险操作
+- **细粒度权限**：Owner 全权限、非 Owner 通过 TablePermission 逐表授权、ColumnPermission 逐列限制、Admin 全局通行
 
 ---
 
@@ -371,6 +389,35 @@ npm run dev
 | `src/components/schema/export-template-editor.tsx` | 新增样式配置、Logo 上传、数据源选择、筛选面板 |
 | `src/app/api/tables/[tableId]/export/route.ts` | Content-Disposition 改为 RFC 5987 标准 |
 
+### Session 4 — 权限管理、超级管理员、API 文档、Bug 修复
+
+#### 新增功能
+
+| 功能 | 核心文件 | 说明 |
+|------|----------|------|
+| **表级权限** | `permissions.ts` + `permission-dialog.tsx` | SELECT/INSERT/UPDATE/DELETE 独立控制，Owner 全权限 |
+| **列级权限** | `permissions.ts` + `permission-dialog.tsx` | READ/WRITE 控制，展开式 UI 配置 |
+| **超级管理员** | `permissions.ts` + schema/table API | `role: ADMIN` 可访问和操作所有数据 |
+| **自动 API 文档** | `api-docs/route.ts` + `api-docs/page.tsx` | 基于表结构自动生成 RESTful API 文档 |
+| **数据表分页调整** | `use-table-data.ts` + `dynamic-data-table.tsx` | 每页条数可选 10/20/50/100/200 |
+
+#### 新增/修改模型
+
+| 模型 | 类型 | 说明 |
+|------|------|------|
+| `User.role` | 新增字段 | `USER`（默认）/ `ADMIN`，控制系统级访问 |
+| `TablePermission` | 新增模型 | 用户-表级权限（tableId + userId 唯一） |
+| `ColumnPermission` | 新增模型 | 列级 READ/WRITE 控制 |
+
+#### 修复的 Bug
+
+| 问题 | 原因 | 修复 |
+|------|------|------|
+| 文件上传流处理不可靠 | Web ReadableStream 手动逐字节读取无背压处理 | `Readable.fromWeb()` + `.pipe(busboy)` |
+| 列物理名冲突导致表创建失败 | 列名转写后可能产生相同 physicalName | `usedPhysNames` Set 跟踪，重复追加 `_2`/`_3` 后缀 |
+| 导入向导表名冲突流程卡死 | API 返回 409 但前端无处理 | 自动以 `表名 (2)(3)` 重试 + 错误 UI 展示 |
+| Next.js Middleware 拦截大文件上传 | 缺少 `middlewareClientMaxBodySize` | 添加配置与 serverActions 一致 |
+
 ---
 
 ## 后续优化计划
@@ -386,8 +433,8 @@ npm run dev
 - [ ] **多数据库支持**：除 SQLite 外支持 MySQL、PostgreSQL 作为数据源
 - [ ] **数据表分区**：支持表分区定义（范围分区、列表分区等）
 - [ ] **数据关联查询**：基于外键关系的跨表联查
-- [ ] **权限管理**：表级、列级的细粒度访问控制
-- [ ] **API 文档自动生成**：基于表结构自动生成 RESTful API
+- [x] **权限管理**：表级、列级的细粒度访问控制 ✔
+- [x] **API 文档自动生成**：基于表结构自动生成 RESTful API ✔
 
 ### 长期愿景
 
@@ -412,6 +459,7 @@ npm run dev
 - 批量导入采用分块策略（每块 500 行），避免单个请求体过大
 - 后台导入状态存储在客户端 Zustand store 中，页面切换不丢失
 - 物理表缺失时会自动检测并引导用户重新执行 DDL
+- 权限检查分级：Admin → Schema Owner → TablePermission → ColumnPermission，逐级降权
 
 ### 环境变量
 
