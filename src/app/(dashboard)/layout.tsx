@@ -1,5 +1,7 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { GlobalProgress } from "@/components/layout/global-progress";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function DashboardLayout({
   children,
@@ -15,6 +17,8 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+      <GlobalProgress />
+      <Toaster />
     </div>
   );
 }

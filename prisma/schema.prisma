@@ -71,6 +71,8 @@ model Schema {
 
   user        User              @relation(fields: [userId], references: [id])
   tables      TableDefinition[]
+  views       ViewDefinition[]
+  scripts     CustomScript[]
   importJobs  ImportJob[]
 
   @@unique([userId, name])
@@ -185,6 +187,41 @@ model TriggerDefinition {
   updatedAt   DateTime @updatedAt
 
   table TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+}
+
+// ─── View Definitions ──────────────────────────────────
+
+// ViewDefinition: A saved SQL view (virtual table based on a query)
+model ViewDefinition {
+  id          String   @id @default(cuid())
+  schemaId    String
+  viewName    String
+  sql         String   // The SELECT query that defines the view
+  description String?
+  status      String   @default("DRAFT") // DRAFT, CREATED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schema Schema @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+
+  @@unique([schemaId, viewName])
+}
+
+// ─── Custom Scripts ───────────────────────────────────
+
+// CustomScript: Saved SQL scripts (like stored procedures for SQLite)
+model CustomScript {
+  id          String   @id @default(cuid())
+  schemaId    String
+  scriptName  String
+  sql         String   // The SQL to execute
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schema Schema @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+
+  @@unique([schemaId, scriptName])
 }
 
 // ─── Import Jobs ────────────────────────────────────────

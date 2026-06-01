@@ -4,10 +4,20 @@ import { authOptions } from "@/lib/auth/auth-options";
 import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
 
+const columnSchema = z.object({
+  sourceName: z.string(),
+  logicalName: z.string().min(1, "字段名称不能为空"),
+  dataType: z.string().min(1),
+  isPrimaryKey: z.boolean().optional().default(false),
+  isNullable: z.boolean().optional().default(true),
+});
+
 const createTableSchema = z.object({
   logicalName: z.string().min(1, "名称不能为空").max(100),
   description: z.string().max(500).optional(),
   headerRowNumber: z.number().int().min(1).optional().default(1),
+  sourceFile: z.string().optional(),
+  columns: z.array(columnSchema).optional().default([]),
 });
 
 function generatePhysicalName(): string {
@@ -79,8 +89,28 @@ export async function POST(
         physicalName,
         description: parsed.data.description,
         headerRowNumber: parsed.data.headerRowNumber,
+        sourceFile: parsed.data.sourceFile,
         status: "DRAFT",
+        columns: {
+          create: parsed.data.columns.map((col, idx) => ({
+            logicalName: col.logicalName,
+            physicalName: col.logicalName
+              ? col.logicalName
+                  .replace(/[^\w\s一-鿿]/g, "")
+                  .replace(/([a-z])([A-Z])/g, "$1_$2")
+                  .replace(/[\s]+/g, "_")
+                  .toLowerCase()
+                  .replace(/[^\w]/g, "")
+                  .replace(/^_+|_+$/g, "") || `col_${idx + 1}`
+              : `col_${idx + 1}`,
+            dataType: col.dataType,
+            isPrimaryKey: col.isPrimaryKey,
+            isNullable: col.isNullable,
+            ordinalPosition: idx + 1,
+          })),
+        },
       },
+      include: { columns: true },
     });
 
     return NextResponse.json(table, { status: 201 });

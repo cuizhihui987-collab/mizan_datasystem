@@ -1,20 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import type { FilterGroup } from "@/lib/query/dynamic-query-builder";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useTableData(tableId: string | undefined) {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
   const [sort, setSort] = useState<string | undefined>();
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [search, setSearch] = useState("");
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const filters: Record<string, any> = {};
-  if (search) filters._search = search;
+  const [filters, setFilters] = useState<FilterGroup | undefined>();
 
   const query = useQuery({
-    queryKey: ["table-data", tableId, page, pageSize, sort, order, search],
+    queryKey: ["table-data", tableId, page, pageSize, sort, order, search, filters],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: String(page),
@@ -22,7 +19,10 @@ export function useTableData(tableId: string | undefined) {
       });
       if (sort) params.set("sort", sort);
       if (order) params.set("order", order);
-      if (search) params.set("filters", JSON.stringify({ _global: search }));
+      if (search) params.set("search", search);
+      if (filters && filters.conditions.length > 0) {
+        params.set("filters", JSON.stringify(filters));
+      }
 
       const res = await fetch(`/api/tables/${tableId}/data?${params}`);
       if (!res.ok) {
@@ -51,6 +51,11 @@ export function useTableData(tableId: string | undefined) {
     search,
     setSearch: (v: string) => {
       setSearch(v);
+      setPage(1);
+    },
+    filters,
+    setFilters: (f: FilterGroup | undefined) => {
+      setFilters(f);
       setPage(1);
     },
   };

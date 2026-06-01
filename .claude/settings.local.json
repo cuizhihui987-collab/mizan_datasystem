@@ -18,7 +18,26 @@
       "Bash(node -e ' *)",
       "Bash(awk '{print $7}')",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git branch *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(taskkill /f /pid 2340)",
+      "Bash(taskkill /f /pid 20812)",
+      "Bash(powershell -Command \"Get-Process -Name node | Stop-Process -Force\")",
+      "Bash(node -e \"const r = require\\('recharts'\\); console.log\\(Object.keys\\(r\\).filter\\(k => k.includes\\('Scatter'\\) || k.includes\\('Composed'\\) || k.includes\\('Radar'\\) || k.includes\\('Polar'\\)\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(mkdir -p \"D:\\\\工作\\\\project\\\\mizan_datasystem\\\\src\\\\app\\\\api\\\\schemas\\\\[schemaId]\\\\views\\\\[viewId]\\\\execute\")",
+      "Bash(mkdir -p \"D:\\\\工作\\\\project\\\\mizan_datasystem\\\\src\\\\app\\\\api\\\\schemas\\\\[schemaId]\\\\scripts\\\\[scriptId]\\\\execute\")",
+      "Bash(sqlite3 prisma/dev.db \"SELECT id, name, status FROM Schema LIMIT 5;\")",
+      "Bash(sqlite3 prisma/dev.db ' *)",
+      "Bash(sqlite3 prisma/dev.db \".tables\")",
+      "Bash(node -e \"const l = require\\('lucide-react'\\); console.log\\('Eye:', !!l.Eye, 'Terminal:', !!l.Terminal\\);\")",
+      "Bash(sqlite3 prisma/dev.db \"SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'mzan_tbl_%';\")"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "playwright"
+  ],
+  "spinnerTipsEnabled": true
 }

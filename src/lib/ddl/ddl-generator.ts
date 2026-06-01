@@ -63,8 +63,6 @@ export class DDLGenerator {
     const tableRef = `"${def.physicalName}"`;
     const lines: string[] = [];
 
-    lines.push(`CREATE TABLE ${tableRef} (`);
-
     // System columns
     lines.push(`  "_id" INTEGER PRIMARY KEY AUTOINCREMENT`);
     lines.push(`  "_created_at" TEXT DEFAULT (datetime('now'))`);
@@ -98,18 +96,7 @@ export class DDLGenerator {
       lines.push(`  ${parts.join(" ")}`);
     }
 
-    // User-specified PK constraint
-    const pkColumns = sortedColumns
-      .filter((c) => c.isPrimaryKey)
-      .map((c) => `"${c.physicalName}"`);
-
-    if (pkColumns.length > 0) {
-      // SQLite doesn't support ADD CONSTRAINT for PK in CREATE TABLE
-      // We'll use them as composite key
-      lines.push(`  PRIMARY KEY ("_id")`);
-    }
-
-    // Unique constraints
+	// Unique constraints
     const uniqueColumns = sortedColumns.filter(
       (c) => c.isUnique && !c.isPrimaryKey
     );
@@ -119,8 +106,9 @@ export class DDLGenerator {
       );
     }
 
-    lines.push(");");
-    statements.push(lines.join(",\n"));
+    statements.push(
+      `CREATE TABLE ${tableRef} (\n${lines.join(",\n")}\n);`
+    );
 
     // Indexes
     for (const idx of def.indexes) {

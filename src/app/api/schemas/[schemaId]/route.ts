@@ -81,7 +81,27 @@ export async function DELETE(
     return NextResponse.json({ error: "数据模型不存在" }, { status: 404 });
   }
 
-  await prisma.schema.delete({ where: { id: schemaId } });
+  // Cascade delete: manually handle relations that lack onDelete: Cascade
+  const tables = await prisma.tableDefinition.findMany({
+    where: { schemaId },
+    select: { id: true },
+  });
+  const tableIds = tables.map((t) => t.id);
+
+  await prisma.$transaction([
+    // ForeignKeyDefinition: FKTtargetTable has no cascade
+    prisma.foreignKeyDefinition.deleteMany({
+      where: { referencedTableId: { in: tableIds } },
+    }),
+    // ImportJob: no cascade on schemaId or tableId
+    prisma.importJob.deleteMany({
+      where: { OR: [{ schemaId }, { tableId: { in: tableIds } }] },
+    }),
+    // TableDefinition: cascades to ColumnDef, IndexDef, TriggerDef, source FK
+    prisma.tableDefinition.deleteMany({ where: { schemaId } }),
+    // Finally delete the schema
+    prisma.schema.delete({ where: { id: schemaId } }),
+  ]);
 
   return NextResponse.json({ success: true });
 }

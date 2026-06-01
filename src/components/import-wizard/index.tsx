@@ -5,18 +5,32 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StepUpload } from "./step-upload";
 import { StepParsePreview } from "./step-parse-preview";
-import { Check, Upload, Table } from "lucide-react";
+import { StepColumnMapping, type ColumnMapping } from "./step-column-mapping";
+import { Check, Upload, Table, ListOrdered } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ImportWizardProps {
   schemaId: string;
 }
 
-type Step = "upload" | "parse" | "done";
+interface ParseData {
+  headers: string[];
+  suggestedTypes: Array<{
+    columnIndex: number;
+    columnName: string;
+    detectedType: string;
+    confidence: number;
+    nullCount: number;
+  }>;
+  totalRows: number;
+}
+
+type Step = "upload" | "parse" | "mapping" | "done";
 
 const steps = [
   { id: "upload" as Step, label: "上传文件", icon: Upload },
   { id: "parse" as Step, label: "解析数据", icon: Table },
+  { id: "mapping" as Step, label: "字段映射", icon: ListOrdered },
   { id: "done" as Step, label: "完成", icon: Check },
 ];
 
@@ -25,6 +39,8 @@ export function ImportWizard({ schemaId }: ImportWizardProps) {
   const [currentStep, setCurrentStep] = useState<Step>("upload");
   const [importId, setImportId] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
+  const [parseData, setParseData] = useState<ParseData | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   const handleUploadComplete = (id: string, name: string) => {
     setImportId(id);
@@ -32,25 +48,43 @@ export function ImportWizard({ schemaId }: ImportWizardProps) {
     setCurrentStep("parse");
   };
 
-  const handleConfirm = async (tableName: string, headerRow: number) => {
-    if (!importId) return;
+  const handleParseComplete = (
+    headers: string[],
+    suggestedTypes: ParseData["suggestedTypes"],
+    totalRows: number
+  ) => {
+    setParseData({ headers, suggestedTypes, totalRows });
+    setCurrentStep("mapping");
+  };
+
+  const handleMappingConfirm = async (
+    columns: ColumnMapping[],
+    tableName: string
+  ) => {
+    if (!importId || !parseData) return;
+    setIsCreating(true);
 
     try {
-      // Create table definition from parsed data
       const res = await fetch(`/api/schemas/${schemaId}/tables`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           logicalName: tableName,
-          headerRowNumber: headerRow,
+          headerRowNumber: 1,
           sourceFile: fileName,
+          columns: columns.map((col) => ({
+            sourceName: col.sourceName,
+            logicalName: col.logicalName,
+            dataType: col.dataType,
+            isPrimaryKey: col.isPrimaryKey,
+            isNullable: col.isNullable,
+          })),
         }),
       });
 
       const table = await res.json();
 
       if (res.ok) {
-        // Link import job to table
         await fetch(`/api/imports/${importId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -58,25 +92,28 @@ export function ImportWizard({ schemaId }: ImportWizardProps) {
         });
 
         setCurrentStep("done");
-        // Navigate to table DDL designer
         setTimeout(() => {
           router.push(`/schemas/${schemaId}/tables/${table.id}/ddl-designer`);
         }, 1000);
+      } else {
+        console.error("Failed to create table:", table.error);
       }
     } catch (err) {
       console.error("Failed to create table:", err);
+    } finally {
+      setIsCreating(false);
     }
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Step indicator */}
-      <div className="flex items-center justify-center gap-2">
+      <div className="flex items-center justify-center gap-2 overflow-x-auto pb-2">
         {steps.map((step, idx) => (
-          <div key={step.id} className="flex items-center gap-2">
+          <div key={step.id} className="flex items-center gap-2 shrink-0">
             <div
               className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors",
+                "flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-colors whitespace-nowrap",
                 currentStep === step.id
                   ? "bg-primary text-primary-foreground"
                   : steps.findIndex((s) => s.id === currentStep) > idx
@@ -90,7 +127,7 @@ export function ImportWizard({ schemaId }: ImportWizardProps) {
             {idx < steps.length - 1 && (
               <div
                 className={cn(
-                  "h-px w-12",
+                  "h-px w-12 shrink-0",
                   steps.findIndex((s) => s.id === currentStep) > idx
                     ? "bg-primary"
                     : "bg-muted"
@@ -101,15 +138,16 @@ export function ImportWizard({ schemaId }: ImportWizardProps) {
         ))}
       </div>
 
-      <Card>
-        <CardHeader>
+      <Card className="flex flex-col max-h-[calc(100vh-12rem)]">
+        <CardHeader className="shrink-0">
           <CardTitle>
             {currentStep === "upload" && "上传文件"}
             {currentStep === "parse" && `解析 - ${fileName}`}
+            {currentStep === "mapping" && "字段映射"}
             {currentStep === "done" && "创建成功"}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-y-auto min-h-0">
           {currentStep === "upload" && (
             <StepUpload
               schemaId={schemaId}
@@ -119,14 +157,25 @@ export function ImportWizard({ schemaId }: ImportWizardProps) {
           {currentStep === "parse" && importId && (
             <StepParsePreview
               importId={importId}
-              onConfirm={handleConfirm}
+              onConfirm={handleParseComplete}
               onBack={() => setCurrentStep("upload")}
+            />
+          )}
+          {currentStep === "mapping" && parseData && (
+            <StepColumnMapping
+              headers={parseData.headers}
+              suggestedTypes={parseData.suggestedTypes}
+              onConfirm={handleMappingConfirm}
+              onBack={() => setCurrentStep("parse")}
+              defaultTableName={parseData.headers[0] || "未命名表"}
             />
           )}
           {currentStep === "done" && (
             <div className="py-12 text-center space-y-4">
               <Check className="h-16 w-16 mx-auto text-green-500" />
-              <p className="text-lg font-medium">表创建成功，正在进入 DDL 设计器...</p>
+              <p className="text-lg font-medium">
+                {isCreating ? "正在创建..." : "表创建成功，正在进入 DDL 设计器..."}
+              </p>
             </div>
           )}
         </CardContent>

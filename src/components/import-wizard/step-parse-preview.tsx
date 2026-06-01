@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,7 +23,11 @@ interface ParseResult {
 
 interface StepParsePreviewProps {
   importId: string;
-  onConfirm: (tableName: string, headerRow: number) => void;
+  onConfirm: (
+    headers: string[],
+    suggestedTypes: ParseResult["suggestedTypes"],
+    totalRows: number
+  ) => void;
   onBack: () => void;
 }
 
@@ -33,7 +37,6 @@ export function StepParsePreview({
   onBack,
 }: StepParsePreviewProps) {
   const [headerRow, setHeaderRow] = useState(1);
-  const [tableName, setTableName] = useState("");
 
   const { data, isLoading, error, refetch } = useQuery<ParseResult>({
     queryKey: ["parse", importId, headerRow],
@@ -45,12 +48,6 @@ export function StepParsePreview({
       }).then((r) => r.json()),
     enabled: !!importId,
   });
-
-  useEffect(() => {
-    if (data?.headers && !tableName) {
-      setTableName(data.headers[0] || "未命名表");
-    }
-  }, [data, tableName]);
 
   const typeBadge = (type: string) => {
     const colors: Record<string, "default" | "secondary" | "success" | "warning"> = {
@@ -75,16 +72,7 @@ export function StepParsePreview({
             value={headerRow}
             onChange={(e) => {
               setHeaderRow(Number(e.target.value));
-              setTableName("");
             }}
-          />
-        </div>
-        <div className="flex-1">
-          <label className="text-sm font-medium">表名称</label>
-          <Input
-            value={tableName}
-            onChange={(e) => setTableName(e.target.value)}
-            placeholder="输入表名称"
           />
         </div>
         <Button variant="outline" onClick={() => refetch()}>
@@ -139,20 +127,22 @@ export function StepParsePreview({
               </tbody>
             </table>
           </div>
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={onBack}>
+              返回
+            </Button>
+            <Button
+              onClick={() =>
+                onConfirm(data.headers, data.suggestedTypes, data.totalRows)
+              }
+              disabled={isLoading}
+            >
+              下一步：字段映射
+            </Button>
+          </div>
         </>
       ) : null}
-
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack}>
-          返回
-        </Button>
-        <Button
-          onClick={() => onConfirm(tableName, headerRow)}
-          disabled={!tableName || isLoading}
-        >
-          确认并创建表
-        </Button>
-      </div>
     </div>
   );
 }
