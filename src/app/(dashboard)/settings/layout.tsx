@@ -10,6 +10,7 @@ const adminTabs = [
   { href: "/settings/roles", label: "角色管理" },
   { href: "/settings/permissions", label: "权限管理" },
   { href: "/settings/storage", label: "存储设置" },
+  { href: "/settings/sync", label: "数据同步" },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {

@@ -156,6 +156,7 @@ model TableDefinition {
   triggers              TriggerDefinition[]
   importJobs            ImportJob[]
   tablePermissions      TablePermission[]
+  syncConnections       SyncConnection[]
 
   @@unique([schemaId, logicalName])
 }
@@ -357,6 +358,46 @@ model ColumnPermission {
   canWrite  Boolean  @default(true)
 
   @@unique([tablePermissionId, columnId])
+}
+
+// ─── Data Sync ──────────────────────────────────────
+
+model SyncConnection {
+  id           String   @id @default(cuid())
+  name         String
+  endpoint     String
+  method       String   @default("GET") // GET, POST
+  headers      String?  // JSON: { "Authorization": "..." }
+  authType     String   @default("none") // none, basic, token
+  authConfig   String?  // JSON: { username, password } or { token }
+  direction    String   @default("pull") // pull, push, bidirectional
+  syncInterval Int      @default(0) // minutes, 0 = manual
+  tableId      String
+  keyField     String?  // for upsert matching
+  fieldMapping String?  // JSON: [{ externalField, localColumn }]
+  enabled      Boolean  @default(true)
+  lastSyncAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  table TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  jobs  SyncJob[]
+}
+
+model SyncJob {
+  id           String    @id @default(cuid())
+  connectionId String
+  direction    String    // pull, push
+  status       String    @default("pending") // pending, processing, completed, failed
+  totalRows    Int       @default(0)
+  successRows  Int       @default(0)
+  errorRows    Int       @default(0)
+  errorLog     String?   // JSON array
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  connection SyncConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 }
 
 // ─── Notifications ───────────────────────────────────
