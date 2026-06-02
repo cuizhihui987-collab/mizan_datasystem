@@ -47,6 +47,7 @@ import {
   Plus,
   Tag,
   Share2,
+  Eye,
   X,
 } from "lucide-react";
 
@@ -109,6 +110,13 @@ export default function FilesPage() {
   const [sharingFile, setSharingFile] = useState<StoredFile | null>(null);
   const [shareUserId, setShareUserId] = useState("");
   const [allUsers, setAllUsers] = useState<Array<{ id: string; name: string | null; email: string }>>([]);
+  const [previewFile, setPreviewFile] = useState<StoredFile | null>(null);
+  const [previewContent, setPreviewContent] = useState<string>("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [previewData, setPreviewData] = useState<any>(null);
+  const [previewSheet, setPreviewSheet] = useState(0);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
   const [currentFolder, setCurrentFolder] = useState("");
   const [folders, setFolders] = useState<string[]>([]);
   const [page, setPage] = useState(1);
@@ -179,6 +187,23 @@ export default function FilesPage() {
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "删除失败"),
   });
+
+  const loadPreview = async (file: StoredFile) => {
+    setPreviewLoading(true);
+    setPreviewError("");
+    setPreviewContent("");
+    setPreviewData(null);
+    try {
+      const res = await fetch(`/api/files/${file.id}/preview`);
+      const data = await res.json();
+      if (data.type === "error") throw new Error(data.message || "预览失败");
+      setPreviewData(data);
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : "无法预览此文件");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const shareMutation = useMutation({
     mutationFn: async ({ fileId, userId }: { fileId: string; userId: string }) => {
@@ -453,6 +478,9 @@ export default function FilesPage() {
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setEditingTags(file); setTagInput(""); }} title="编辑标签">
                           <Tag className="h-3.5 w-3.5" />
                         </Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setPreviewFile(file); loadPreview(file); }} title="预览">
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setSharingFile(file)} title="分享">
                           <Share2 className="h-3.5 w-3.5" />
                         </Button>
@@ -566,6 +594,74 @@ export default function FilesPage() {
                 ))
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview dialog */}
+      <Dialog open={!!previewFile} onOpenChange={(open) => { if (!open) { setPreviewFile(null); setPreviewData(null); setPreviewSheet(0); } }}>
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="truncate flex items-center gap-2">
+              {previewFile?.originalName}
+              {previewData?.type === "excel" && <Badge variant="outline" className="text-[10px]">{(previewData.sheets?.[previewSheet]?.headers?.length || 0)} 列</Badge>}
+              {previewData?.type === "excel" && previewData.totalSheets > 1 && (
+                <span className="text-xs font-normal text-muted-foreground">Sheet {previewSheet + 1}/{previewData.totalSheets}</span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto min-h-0">
+            {previewLoading ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">加载中...</div>
+            ) : previewError ? (
+              <div className="py-12 text-center text-sm text-destructive">{previewError}</div>
+            ) : previewData?.type === "image" ? (
+              <div className="flex items-center justify-center p-4 bg-muted/20 rounded-md">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={previewData.url} alt={previewFile?.originalName} className="max-w-full max-h-[65vh] object-contain" />
+              </div>
+            ) : previewData?.type === "excel" || previewData?.type === "csv" || previewData?.type === "json-table" ? (
+              <div className="space-y-2">
+                {previewData.type === "excel" && previewData.totalSheets > 1 && (
+                  <div className="flex gap-1 flex-wrap">
+                    {previewData.sheets.map((s: { name: string }, i: number) => (
+                      <button key={i} onClick={() => setPreviewSheet(i)}
+                        className={`text-xs px-2 py-1 rounded ${previewSheet === i ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-accent"}`}
+                      >{s.name}</button>
+                    ))}
+                  </div>
+                )}
+                <div className="border rounded-md overflow-auto max-h-[60vh]">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-muted/50 sticky top-0">
+                        {(previewData.type === "excel" ? previewData.sheets[previewSheet].headers : previewData.headers).map((h: string, i: number) => (
+                          <th key={i} className="text-left p-2 font-medium whitespace-nowrap border-b">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(previewData.type === "excel" ? previewData.sheets[previewSheet].rows : previewData.rows).map((row: Record<string, unknown>, ri: number) => (
+                        <tr key={ri} className="border-b last:border-0 hover:bg-muted/20">
+                          {(previewData.type === "excel" ? previewData.sheets[previewSheet].headers : previewData.headers).map((h: string, ci: number) => (
+                            <td key={ci} className="p-2 truncate max-w-[250px]">{String(row[h] ?? "")}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {previewData.totalRows && previewData.totalRows > 200 && (
+                  <p className="text-xs text-muted-foreground">显示前 200 行，共 {previewData.totalRows} 行</p>
+                )}
+              </div>
+            ) : previewData?.type === "json" ? (
+              <pre className="text-xs font-mono whitespace-pre-wrap break-all p-4 bg-muted/10 rounded-md max-h-[65vh] overflow-auto">{JSON.stringify(previewData.data, null, 2)}</pre>
+            ) : previewData?.type === "text" ? (
+              <pre className="text-xs font-mono whitespace-pre-wrap break-all p-4 bg-muted/10 rounded-md max-h-[65vh] overflow-auto">{previewData.content}</pre>
+            ) : (
+              <div className="py-12 text-center text-sm text-muted-foreground">暂不支持预览此格式</div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

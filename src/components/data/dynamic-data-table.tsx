@@ -923,6 +923,10 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
   );
 }
 
+function isImageUrl(val: string): boolean {
+  return /^https?:\/\/.+\.(png|jpe?g|gif|webp|svg|bmp)(\?.*)?$/i.test(val) || /^data:image\//.test(val);
+}
+
 function formatCellValue(value: unknown, dataType: string): React.ReactNode {
   if (value === null || value === undefined)
     return <span className="text-muted-foreground italic">NULL</span>;
@@ -933,8 +937,18 @@ function formatCellValue(value: unknown, dataType: string): React.ReactNode {
     case "DATE":
     case "DATETIME":
       return String(value);
-    default:
-      return String(value);
+    default: {
+      const str = String(value);
+      if (isImageUrl(str)) {
+        return (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={str} alt="" className="max-h-10 rounded object-contain cursor-pointer hover:opacity-80"
+            onClick={(e) => { e.stopPropagation(); window.open(str, "_blank"); }}
+          />
+        );
+      }
+      return str;
+    }
   }
 }
 
