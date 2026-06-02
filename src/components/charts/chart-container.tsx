@@ -1,150 +1,167 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-  AreaChart,
-  Area,
-  ScatterChart,
-  Scatter,
-  ComposedChart,
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-} from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { AlertCircle, Download, RotateCcw, FileDown } from "lucide-react";
+import { ChartControls } from "./chart-controls";
+import { renderChartByType, getEmptyHint, isChartReady } from "./chart-renderers";
+import {
+  aggregateData,
+  sortData,
+  downloadChartPNG,
+  downloadChartCSV,
+  COLORS,
+  type ColumnMeta,
+  type ChartType,
+  type AggregationMode,
+} from "./chart-utils";
 
-const COLORS = [
-  "#3b82f6",
-  "#ef4444",
-  "#10b981",
-  "#f59e0b",
-  "#8b5cf6",
-  "#ec4899",
-  "#06b6d4",
-  "#84cc16",
-  "#f97316",
-  "#6366f1",
-  "#14b8a6",
-  "#e11d48",
-];
-
-const chartTypes = [
-  { value: "bar", label: "柱状图" },
-  { value: "line", label: "折线图" },
-  { value: "area", label: "面积图" },
-  { value: "pie", label: "饼图" },
-  { value: "scatter", label: "散点图" },
-  { value: "combo", label: "组合图 (柱+线)" },
-  { value: "radar", label: "雷达图" },
-  { value: "heatmap", label: "热力图" },
-] as const;
-
-type ChartType = (typeof chartTypes)[number]["value"];
-
-interface ColumnMeta {
-  physicalName: string;
-  logicalName: string;
-  dataType: string;
-}
+const CHART_ID = "chart-render-area";
 
 interface ChartContainerProps {
   tableId: string;
 }
 
 export function ChartContainer({ tableId }: ChartContainerProps) {
+  // ── Chart config state ──
   const [chartType, setChartType] = useState<ChartType>("bar");
   const [xAxis, setXAxis] = useState<string>("");
-  const [yAxis, setYAxis] = useState<string>("");
-  const [yAxis2, setYAxis2] = useState<string>(""); // for combo: line column
-  const [colorGroup, setColorGroup] = useState<string>(""); // for scatter grouping
+  const [yAxes, setYAxes] = useState<string[]>([]);
+  const [yAxis2, setYAxis2] = useState<string>("");
+  const [colorGroup, setColorGroup] = useState<string>("");
+  const [aggregation, setAggregation] = useState<AggregationMode>("none");
+  const [stacked, setStacked] = useState(false);
+  const [showLabels, setShowLabels] = useState(false);
+  const [smooth, setSmooth] = useState(false);
+  const [sortBy, setSortBy] = useState<string>("_none");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [chartTitle, setChartTitle] = useState("");
 
-  const { data: metadata } = useQuery({
+  // ── Data fetching ──
+  const {
+    data: metadata,
+    error: metaError,
+    refetch: refetchMeta,
+  } = useQuery({
     queryKey: ["table-meta", tableId],
     queryFn: () => fetch(`/api/tables/${tableId}`).then((r) => r.json()),
   });
 
-  const { data: tableData, isLoading } = useQuery({
+  const {
+    data: tableData,
+    isLoading,
+    error: dataError,
+    refetch: refetchData,
+  } = useQuery({
     queryKey: ["table-data-all", tableId],
     queryFn: () =>
       fetch(`/api/tables/${tableId}/data?pageSize=500`).then((r) => r.json()),
     enabled: !!tableId,
   });
 
+  // ── Derived ──
   const columns: ColumnMeta[] = metadata?.columns || [];
-  const numericColumns = columns.filter((c) =>
-    ["INTEGER", "BIGINT", "FLOAT", "DOUBLE", "DECIMAL"].includes(c.dataType)
+  const tableName: string = metadata?.logicalName || metadata?.physicalName || "";
+
+  const numericColumns = useMemo(
+    () =>
+      columns.filter((c) =>
+        ["INTEGER", "BIGINT", "FLOAT", "DOUBLE", "DECIMAL"].includes(c.dataType)
+      ),
+    [columns]
   );
-  const textColumns = columns.filter(
-    (c) =>
-      !["INTEGER", "BIGINT", "FLOAT", "DOUBLE", "DECIMAL"].includes(c.dataType)
+
+  const textColumns = useMemo(
+    () =>
+      columns.filter(
+        (c) =>
+          !["INTEGER", "BIGINT", "FLOAT", "DOUBLE", "DECIMAL"].includes(c.dataType)
+      ),
+    [columns]
   );
-  // Auto-select fields
-  useMemo(() => {
-    if (!xAxis) {
+
+  // Auto-select fields on first load
+  useEffect(() => {
+    if (metadata && !xAxis && !yAxes.length) {
       if (chartType === "scatter" && numericColumns.length > 0) {
         setXAxis(numericColumns[0].physicalName);
       } else if (textColumns.length > 0) {
         setXAxis(textColumns[0].physicalName);
       }
-    }
-    if (!yAxis && numericColumns.length > 0) {
-      setYAxis(numericColumns[0].physicalName);
-      if (numericColumns.length > 1) {
-        setYAxis2(numericColumns[1].physicalName);
+      if (numericColumns.length > 0) {
+        setYAxes([numericColumns[0].physicalName]);
+        if (numericColumns.length > 1) {
+          setYAxis2(numericColumns[1].physicalName);
+        }
       }
     }
-  }, [textColumns, numericColumns, chartType, xAxis, yAxis]);
+  }, [metadata, chartType]);
 
-  const chartData = useMemo(() => {
+  // Set chart title from table name
+  useEffect(() => {
+    if (tableName && !chartTitle) {
+      setChartTitle(tableName);
+    }
+  }, [tableName]);
+
+  // ── Data processing pipeline ──
+  const processedData = useMemo(() => {
     if (!tableData?.rows) return [];
-    // Use more data for scatter/heatmap, less for others
-    const maxRows = ["scatter", "heatmap"].includes(chartType) ? 500 : 50;
-    return tableData.rows.slice(0, maxRows);
-  }, [tableData, chartType]);
 
-  // --- Heatmap data preparation ---
-  const heatmapData = useMemo(() => {
-    if (chartType !== "heatmap" || !xAxis || !yAxis || !chartData.length) {
-      return null;
+    const maxRows = ["scatter", "heatmap"].includes(chartType) ? 500 : 200;
+    let data = tableData.rows.slice(0, maxRows) as Record<string, unknown>[];
+
+    // 1. Aggregate
+    if (aggregation !== "none" && xAxis && yAxes.length > 0) {
+      data = aggregateData(data, xAxis, yAxes, aggregation);
     }
 
-    const xKey = xAxis;
-    const yKey = yAxis;
-    const valKey = yAxis2 || numericColumns[0]?.physicalName;
+    // 2. Sort
+    if (sortBy && sortBy !== "_none") {
+      data = sortData(data, sortBy, sortOrder);
+    }
+
+    return data;
+  }, [tableData, chartType, xAxis, yAxes, aggregation, sortBy, sortOrder]);
+
+  // ── Specialized data for radar / scatter group / heatmap ──
+  const scatterGroupedData = useMemo(() => {
+    if (chartType !== "scatter" || !colorGroup) return null;
+    const groups = new Map<string, Record<string, unknown>[]>();
+    for (const row of processedData) {
+      const key = String(row[colorGroup] ?? "(空)");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(row);
+    }
+    return Array.from(groups.entries()).map(([name, data], i) => ({
+      name,
+      data,
+      fill: COLORS[i % COLORS.length],
+    }));
+  }, [chartType, colorGroup, processedData]);
+
+  const radarColumnDefs = useMemo(() => {
+    if (chartType !== "radar") return [];
+    return numericColumns.slice(0, 8);
+  }, [chartType, numericColumns]);
+
+  const heatmapData = useMemo(() => {
+    if (chartType !== "heatmap" || !xAxis || !yAxis2 || !processedData.length) return null;
+
+    const valKey = yAxes[0] || numericColumns[0]?.physicalName;
     if (!valKey) return null;
 
-    // Collect unique x and y values
     const xVals = new Set<string>();
     const yVals = new Set<string>();
     const grid: Record<string, Record<string, number>> = {};
 
-    for (const row of chartData) {
-      const xv = String(row[xKey] ?? "");
-      const yv = String(row[yKey] ?? "");
+    for (const row of processedData) {
+      const xv = String(row[xAxis] ?? "");
+      const yv = String(row[yAxis2] ?? "");
       const vv = Number(row[valKey]) || 0;
       xVals.add(xv);
       yVals.add(yv);
@@ -155,7 +172,6 @@ export function ChartContainer({ tableId }: ChartContainerProps) {
     const xArr = Array.from(xVals).slice(0, 20);
     const yArr = Array.from(yVals).slice(0, 20);
 
-    // Compute min/max for color scale
     let minVal = Infinity;
     let maxVal = -Infinity;
     for (const x of xArr) {
@@ -165,579 +181,155 @@ export function ChartContainer({ tableId }: ChartContainerProps) {
         if (v > maxVal) maxVal = v;
       }
     }
-    const range = maxVal - minVal || 1;
 
-    return { xArr, yArr, grid, minVal, range, valKey };
-  }, [chartType, xAxis, yAxis, yAxis2, chartData, numericColumns]);
+    return { xArr, yArr, grid, minVal, range: maxVal - minVal || 1, valKey };
+  }, [chartType, xAxis, yAxis2, yAxes, processedData, numericColumns]);
 
-  // --- Scatter data with optional color grouping ---
-  const scatterGroupedData = useMemo(() => {
-    if (chartType !== "scatter" || !colorGroup) return null;
-    const groups = new Map<string, Record<string, unknown>[]>();
-    for (const row of chartData) {
-      const key = String(row[colorGroup] ?? "(空)");
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(row);
-    }
-    return Array.from(groups.entries()).map(([name, data], i) => ({
-      name,
-      data,
-      fill: COLORS[i % COLORS.length],
-    }));
-  }, [chartType, colorGroup, chartData]);
+  const chartReady = isChartReady(chartType, xAxis, yAxes);
+  const emptyHint = getEmptyHint(chartType, yAxes, xAxis, numericColumns);
 
-  // --- Radar data preparation ---
-  const radarColumns = useMemo(() => {
-    if (chartType !== "radar") return [];
-    // Use all numeric columns for radar
-    return numericColumns.slice(0, 8);
-  }, [chartType, numericColumns]);
-
-  const renderChart = () => {
-    const commonProps = {
-      data: chartData,
-      margin: { top: 10, right: 30, left: 0, bottom: 0 } as const,
-    };
-
-    switch (chartType) {
-      case "bar":
-        if (!xAxis || !yAxis) return emptyHint;
-        return (
-          <ResponsiveContainer width="100%" height={500}>
-            <BarChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={xAxis} tick={{ fontSize: 12 }} />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey={yAxis} fill="#3b82f6" />
-            </BarChart>
-          </ResponsiveContainer>
-        );
-
-      case "line":
-        if (!xAxis || !yAxis) return emptyHint;
-        return (
-          <ResponsiveContainer width="100%" height={500}>
-            <LineChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={xAxis} tick={{ fontSize: 12 }} />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey={yAxis}
-                stroke="#3b82f6"
-                strokeWidth={2}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        );
-
-      case "area":
-        if (!xAxis || !yAxis) return emptyHint;
-        return (
-          <ResponsiveContainer width="100%" height={500}>
-            <AreaChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={xAxis} tick={{ fontSize: 12 }} />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey={yAxis}
-                stroke="#3b82f6"
-                fill="#3b82f6"
-                fillOpacity={0.2}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        );
-
-      case "pie":
-        if (!xAxis || !yAxis) return emptyHint;
-        return (
-          <ResponsiveContainer width="100%" height={500}>
-            <PieChart>
-              <Pie
-                data={chartData}
-                dataKey={yAxis}
-                nameKey={xAxis}
-                cx="50%"
-                cy="50%"
-                outerRadius={180}
-                label
-              >
-                {chartData.map((_: unknown, index: number) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={COLORS[index % COLORS.length]}
-                  />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        );
-
-      // --- Scatter Plot ---
-      case "scatter": {
-        if (!xAxis || !yAxis) return emptyHint;
-
-        if (scatterGroupedData) {
-          return (
-            <ResponsiveContainer width="100%" height={500}>
-              <ScatterChart {...commonProps}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey={xAxis}
-                  type="number"
-                  tick={{ fontSize: 12 }}
-                  label={{
-                    value: getLabel(xAxis),
-                    position: "bottom",
-                    offset: -5,
-                  }}
-                />
-                <YAxis
-                  dataKey={yAxis}
-                  type="number"
-                  label={{
-                    value: getLabel(yAxis),
-                    angle: -90,
-                    position: "insideLeft",
-                  }}
-                />
-                <Tooltip />
-                <Legend />
-                {scatterGroupedData.map((g) => (
-                  <Scatter
-                    key={g.name}
-                    name={g.name}
-                    data={g.data}
-                    fill={g.fill}
-                  />
-                ))}
-              </ScatterChart>
-            </ResponsiveContainer>
-          );
-        }
-
-        return (
-          <ResponsiveContainer width="100%" height={500}>
-            <ScatterChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey={xAxis}
-                type="number"
-                tick={{ fontSize: 12 }}
-                label={{ value: getLabel(xAxis), position: "bottom", offset: -5 }}
-              />
-              <YAxis
-                dataKey={yAxis}
-                type="number"
-                label={{ value: getLabel(yAxis), angle: -90, position: "insideLeft" }}
-              />
-              <Tooltip />
-              <Legend />
-              <Scatter name={`${getLabel(xAxis)} vs ${getLabel(yAxis)}`} data={chartData} fill="#3b82f6" />
-            </ScatterChart>
-          </ResponsiveContainer>
-        );
-      }
-
-      // --- Combo Chart (Bar + Line) ---
-      case "combo": {
-        if (!xAxis || !yAxis) return emptyHint;
-        return (
-          <ResponsiveContainer width="100%" height={500}>
-            <ComposedChart {...commonProps}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={xAxis} tick={{ fontSize: 12 }} />
-              <YAxis yAxisId="left" />
-              <YAxis yAxisId="right" orientation="right" />
-              <Tooltip />
-              <Legend />
-              <Bar yAxisId="left" dataKey={yAxis} fill="#3b82f6" name={getLabel(yAxis)} />
-              {yAxis2 && (
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey={yAxis2}
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  name={getLabel(yAxis2)}
-                />
-              )}
-            </ComposedChart>
-          </ResponsiveContainer>
-        );
-      }
-
-      // --- Radar Chart ---
-      case "radar": {
-        if (radarColumns.length === 0 || !chartData.length) return emptyHint;
-
-        // Build radar data: first 10 rows as items, all numeric columns as metrics
-        const radarData = chartData.slice(0, 10).map((row: Record<string, unknown>) => {
-          const item: Record<string, unknown> = { name: row[xAxis] || "—" };
-          for (const col of radarColumns) {
-            item[col.physicalName] = Number(row[col.physicalName]) || 0;
-          }
-          return item;
-        });
-
-        return (
-          <ResponsiveContainer width="100%" height={500}>
-            <RadarChart data={radarData}>
-              <PolarGrid />
-              <PolarAngleAxis dataKey="name" tick={{ fontSize: 10 }} />
-              <PolarRadiusAxis />
-              <Tooltip />
-              <Legend />
-              {radarColumns.map((col, idx) => (
-                <Radar
-                  key={col.physicalName}
-                  name={col.logicalName}
-                  dataKey={col.physicalName}
-                  stroke={COLORS[idx % COLORS.length]}
-                  fill={COLORS[idx % COLORS.length]}
-                  fillOpacity={0.15}
-                />
-              ))}
-            </RadarChart>
-          </ResponsiveContainer>
-        );
-      }
-
-      // --- Heatmap ---
-      case "heatmap": {
-        if (!heatmapData) return emptyHint;
-        const { xArr, yArr, grid, minVal, range, valKey } = heatmapData;
-
-        const cellW = Math.max(50, Math.min(100, 800 / xArr.length));
-        const cellH = 30;
-        const totalW = cellW * xArr.length + 100;
-        const totalH = cellH * yArr.length + 60;
-
-        const getColor = (v: number) => {
-          const ratio = (v - minVal) / range;
-          const r = Math.round(240 - ratio * 200);
-          const g = Math.round(240 - ratio * 180);
-          const b = Math.round(255 - ratio * 150);
-          return `rgb(${r},${g},${b})`;
-        };
-
-        return (
-          <div className="overflow-auto">
-            <svg width={totalW} height={totalH}>
-              {/* Column headers */}
-              {xArr.map((x, i) => (
-                <text
-                  key={`ch-${i}`}
-                  x={100 + cellW * i + cellW / 2}
-                  y={14}
-                  textAnchor="middle"
-                  fontSize={10}
-                  fill="currentColor"
-                >
-                  {truncateText(x, cellW / 7)}
-                </text>
-              ))}
-
-              {/* Row headers + cells */}
-              {yArr.map((y, ri) => (
-                <g key={`row-${ri}`}>
-                  <text
-                    x={96}
-                    y={40 + cellH * ri + cellH / 2 + 4}
-                    textAnchor="end"
-                    fontSize={10}
-                    fill="currentColor"
-                  >
-                    {truncateText(y, 8)}
-                  </text>
-                  {xArr.map((x, ci) => {
-                    const v = grid[x]?.[y] ?? 0;
-                    return (
-                      <g key={`c-${ri}-${ci}`}>
-                        <rect
-                          x={100 + cellW * ci}
-                          y={30 + cellH * ri}
-                          width={cellW - 1}
-                          height={cellH - 1}
-                          fill={getColor(v)}
-                          rx={2}
-                        />
-                        <text
-                          x={100 + cellW * ci + cellW / 2}
-                          y={30 + cellH * ri + cellH / 2 + 4}
-                          textAnchor="middle"
-                          fontSize={10}
-                          fill={v > minVal + range * 0.6 ? "#fff" : "#333"}
-                        >
-                          {formatNum(v)}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </g>
-              ))}
-            </svg>
-            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-              <span>低</span>
-              <div className="flex h-3 w-32 rounded overflow-hidden">
-                {Array.from({ length: 10 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="flex-1"
-                    style={{
-                      backgroundColor: `rgb(${240 - i * 20},${240 - i * 18},${255 - i * 15})`,
-                    }}
-                  />
-                ))}
-              </div>
-              <span>高</span>
-              <span className="ml-2">
-                值: {getLabel(valKey)}
-              </span>
-            </div>
-          </div>
-        );
-      }
-
-      default:
-        return emptyHint;
-    }
+  // ── Export handlers ──
+  const handleExportSVG = () => {
+    downloadChartPNG(CHART_ID, `${chartTitle || "chart"}`);
   };
 
-  const emptyHint = (
-    <div className="py-12 text-center text-muted-foreground">
-      {chartType === "radar"
-        ? "雷达图需要数值字段"
-        : chartType === "heatmap"
-          ? "请选择 X、Y 分类字段和数值字段"
-          : "请选择 X 轴和 Y 轴字段"}
-    </div>
-  );
-
-  // Update context-helpers
-  const getLabel = (physicalName: string) =>
-    columns.find((c) => c.physicalName === physicalName)?.logicalName ||
-    physicalName;
-
-  // --- Control panel: extra fields per chart type ---
-  const renderExtraControls = () => {
-    switch (chartType) {
-      case "scatter":
-        return (
-          <div className="flex-1">
-            <label className="text-xs text-muted-foreground">颜色分组 (可选)</label>
-            <Select value={colorGroup} onValueChange={(v) => setColorGroup(v === "_none" ? "" : v)}>
-              <SelectTrigger className="h-8">
-                <SelectValue placeholder="不分" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">不分</SelectItem>
-                {textColumns.map((col) => (
-                  <SelectItem key={col.physicalName} value={col.physicalName}>
-                    {col.logicalName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        );
-
-      case "combo":
-        return (
-          <div className="flex-1">
-            <label className="text-xs text-muted-foreground">折线轴 (右轴)</label>
-            <Select value={yAxis2} onValueChange={setYAxis2}>
-              <SelectTrigger className="h-8">
-                <SelectValue placeholder="选择字段" />
-              </SelectTrigger>
-              <SelectContent>
-                {numericColumns
-                  .filter((c) => c.physicalName !== yAxis)
-                  .map((col) => (
-                    <SelectItem key={col.physicalName} value={col.physicalName}>
-                      {col.logicalName}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-        );
-
-      case "heatmap":
-        return (
-          <>
-            <div className="flex-1">
-              <label className="text-xs text-muted-foreground">Y 轴 (分类)</label>
-              <Select value={yAxis} onValueChange={setYAxis}>
-                <SelectTrigger className="h-8">
-                  <SelectValue placeholder="选择字段" />
-                </SelectTrigger>
-                <SelectContent>
-                  {textColumns.map((col) => (
-                    <SelectItem key={col.physicalName} value={col.physicalName}>
-                      {col.logicalName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex-1">
-              <label className="text-xs text-muted-foreground">数值 (聚合)</label>
-              <Select value={yAxis2} onValueChange={setYAxis2}>
-                <SelectTrigger className="h-8">
-                  <SelectValue placeholder="选择字段" />
-                </SelectTrigger>
-                <SelectContent>
-                  {numericColumns.map((col) => (
-                    <SelectItem key={col.physicalName} value={col.physicalName}>
-                      {col.logicalName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </>
-        );
-
-      case "radar":
-        return null;
-
-      default:
-        return null;
-    }
+  const handleExportCSV = () => {
+    downloadChartCSV(processedData, `${chartTitle || "chart"}`);
   };
 
+  // ── Error state ──
+  const error = metaError || dataError;
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="text-center space-y-3">
+            <AlertCircle className="h-10 w-10 mx-auto text-destructive" />
+            <p className="text-muted-foreground">数据加载失败</p>
+            <p className="text-sm text-muted-foreground/60">
+              {(error as Error)?.message || "请稍后重试"}
+            </p>
+            <Button variant="outline" size="sm" onClick={() => { refetchMeta(); refetchData(); }}>
+              <RotateCcw className="h-3.5 w-3.5 mr-1" />
+              重试
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ── Loading state ──
   if (isLoading) {
-    return <Skeleton className="h-[500px]" />;
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-[500px]" />
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex flex-wrap gap-3">
-        <div className="min-w-[120px] flex-1">
-          <label className="text-xs text-muted-foreground">图表类型</label>
-          <Select
-            value={chartType}
-            onValueChange={(v) => {
-              setChartType(v as ChartType);
-              setColorGroup("");
-            }}
-          >
-            <SelectTrigger className="h-8">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {chartTypes.map((ct) => (
-                <SelectItem key={ct.value} value={ct.value}>
-                  {ct.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* X Axis */}
-        {chartType !== "heatmap" && (
-          <div className="min-w-[120px] flex-1">
-            <label className="text-xs text-muted-foreground">
-              {chartType === "scatter" ? "X 轴 (数值)" : "X 轴 (分类)"}
-            </label>
-            <Select value={xAxis} onValueChange={setXAxis}>
-              <SelectTrigger className="h-8">
-                <SelectValue placeholder="选择字段" />
-              </SelectTrigger>
-              <SelectContent>
-                {chartType === "scatter"
-                  ? numericColumns.map((col) => (
-                      <SelectItem key={col.physicalName} value={col.physicalName}>
-                        {col.logicalName}
-                      </SelectItem>
-                    ))
-                  : textColumns.map((col) => (
-                      <SelectItem key={col.physicalName} value={col.physicalName}>
-                        {col.logicalName}
-                      </SelectItem>
-                    ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Y Axis (numeric) — hidden for heatmap which uses it as Y category */}
-        {chartType !== "heatmap" && chartType !== "radar" && (
-          <div className="min-w-[120px] flex-1">
-            <label className="text-xs text-muted-foreground">
-              {chartType === "scatter" ? "Y 轴 (数值)" : "Y 轴 (数值)"}
-            </label>
-            <Select value={yAxis} onValueChange={setYAxis}>
-              <SelectTrigger className="h-8">
-                <SelectValue placeholder="选择字段" />
-              </SelectTrigger>
-              <SelectContent>
-                {numericColumns.map((col) => (
-                  <SelectItem key={col.physicalName} value={col.physicalName}>
-                    {col.logicalName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Heatmap X axis */}
-        {chartType === "heatmap" && (
-          <div className="min-w-[120px] flex-1">
-            <label className="text-xs text-muted-foreground">X 轴 (分类)</label>
-            <Select value={xAxis} onValueChange={setXAxis}>
-              <SelectTrigger className="h-8">
-                <SelectValue placeholder="选择字段" />
-              </SelectTrigger>
-              <SelectContent>
-                {textColumns.map((col) => (
-                  <SelectItem key={col.physicalName} value={col.physicalName}>
-                    {col.logicalName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {renderExtraControls()}
-      </div>
-
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">
-            {chartTypes.find((ct) => ct.value === chartType)?.label}
-          </CardTitle>
+        <CardContent className="pt-4">
+          <ChartControls
+            chartType={chartType}
+            onChartTypeChange={(v) => { setChartType(v); setColorGroup(""); }}
+            xAxis={xAxis}
+            onXAxisChange={setXAxis}
+            yAxes={yAxes}
+            onYAxesChange={setYAxes}
+            yAxis2={yAxis2}
+            onYAxis2Change={setYAxis2}
+            colorGroup={colorGroup}
+            onColorGroupChange={setColorGroup}
+            aggregation={aggregation}
+            onAggregationChange={setAggregation}
+            stacked={stacked}
+            onStackedChange={setStacked}
+            showLabels={showLabels}
+            onShowLabelsChange={setShowLabels}
+            smooth={smooth}
+            onSmoothChange={setSmooth}
+            sortBy={sortBy}
+            onSortByChange={setSortBy}
+            sortOrder={sortOrder}
+            onSortOrderChange={setSortOrder}
+            textColumns={textColumns}
+            numericColumns={numericColumns}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Chart Display */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <div className="flex items-center gap-2">
+            <Input
+              value={chartTitle}
+              onChange={(e) => setChartTitle(e.target.value)}
+              className="h-7 text-base font-semibold w-auto min-w-[120px] max-w-[300px] border-none px-0 hover:border focus:border focus:px-2"
+            />
+            {chartType && (
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                {chartType === "bar" ? "柱状图" : chartType === "line" ? "折线图" : chartType === "area" ? "面积图" : chartType === "pie" ? "饼图" : chartType === "scatter" ? "散点图" : chartType === "combo" ? "组合图" : chartType === "radar" ? "雷达图" : "热力图"}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {processedData.length > 0 && (
+              <>
+                <span className="text-xs text-muted-foreground mr-2">
+                  {processedData.length} 行
+                </span>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleExportSVG}>
+                  <Download className="h-3 w-3 mr-1" />
+                  SVG
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleExportCSV}>
+                  <FileDown className="h-3 w-3 mr-1" />
+                  CSV
+                </Button>
+              </>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>{renderChart()}</CardContent>
+        <CardContent>
+          {!chartReady ? (
+            <div className="py-16 text-center text-muted-foreground">
+              {emptyHint}
+            </div>
+          ) : processedData.length === 0 ? (
+            <div className="py-16 text-center text-muted-foreground">
+              <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>所选条件下没有数据</p>
+              <p className="text-sm mt-1">尝试调整筛选字段或聚合方式</p>
+            </div>
+          ) : (
+            <div id={CHART_ID}>
+              {renderChartByType({
+                chartType,
+                data: processedData,
+                xAxis,
+                yAxes,
+                yAxis2,
+                colorGroup,
+                stacked,
+                showLabels,
+                smooth,
+                columns,
+                numericColumns,
+                scatterGroupedData,
+                radarColumns: radarColumnDefs,
+                heatmapData,
+                chartId: CHART_ID,
+              })}
+            </div>
+          )}
+        </CardContent>
       </Card>
     </div>
   );
-}
-
-// --- Helpers ---
-
-function truncateText(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max) + "…" : s;
-}
-
-function formatNum(n: number): string {
-  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (Math.abs(n) >= 10_000) return (n / 10_000).toFixed(1) + "万";
-  if (Number.isInteger(n)) return String(n);
-  return n.toFixed(1);
 }

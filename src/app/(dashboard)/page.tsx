@@ -2,13 +2,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth-options";
 import { prisma } from "@/lib/db/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Database, FileSpreadsheet, Table } from "lucide-react";
+import { Database, FileSpreadsheet, Table, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
+import { HomeDashboardPanel } from "@/components/dashboard/home-dashboard-panel";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
 
-  const [schemaCount, tableCount, importCount] = await Promise.all([
+  const [schemaCount, tableCount, importCount, dashboardCount] = await Promise.all([
     prisma.schema.count({
       where: { userId: session?.user?.id, status: "ACTIVE" },
     }),
@@ -18,18 +19,22 @@ export default async function DashboardPage() {
     prisma.importJob.count({
       where: { schema: { userId: session?.user?.id } },
     }),
+    prisma.dashboard.count({
+      where: { schema: { userId: session?.user?.id } },
+    }),
   ]);
 
   const recentSchemas = await prisma.schema.findMany({
     where: { userId: session?.user?.id, status: "ACTIVE" },
     orderBy: { updatedAt: "desc" },
     take: 5,
-    include: { _count: { select: { tables: true } } },
+    include: { _count: { select: { tables: true, dashboards: true } } },
   });
 
   const stats = [
     { label: "数据模型", value: schemaCount, icon: Database, href: "/schemas" },
     { label: "数据表", value: tableCount, icon: Table, href: "/schemas" },
+    { label: "看板", value: dashboardCount, icon: LayoutDashboard, href: "/schemas" },
     { label: "导入记录", value: importCount, icon: FileSpreadsheet, href: "/imports" },
   ];
 
@@ -42,7 +47,7 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         {stats.map((stat) => (
           <Link key={stat.label} href={stat.href}>
             <Card className="transition-colors hover:bg-accent/50">
@@ -86,6 +91,9 @@ export default async function DashboardPage() {
                   </div>
                   <div className="text-sm text-muted-foreground">
                     {schema._count.tables} 个表
+                    {schema._count.dashboards > 0 && (
+                      <> · {schema._count.dashboards} 个看板</>
+                    )}
                   </div>
                 </Link>
               ))}
@@ -93,6 +101,8 @@ export default async function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      <HomeDashboardPanel />
     </div>
   );
 }
