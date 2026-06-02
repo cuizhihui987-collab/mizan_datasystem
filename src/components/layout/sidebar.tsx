@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useSession } from "next-auth/react";
 import {
   Database,
   FileSpreadsheet,
@@ -10,6 +11,11 @@ import {
   LayoutDashboard,
   ChevronLeft,
   ChevronRight,
+  Shield,
+  Users,
+  Key,
+  Lock,
+  FolderOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -26,6 +32,11 @@ const navItems = [
     icon: Database,
   },
   {
+    title: "文件管理",
+    href: "/files",
+    icon: FolderOpen,
+  },
+  {
     title: "导入记录",
     href: "/imports",
     icon: FileSpreadsheet,
@@ -37,9 +48,17 @@ const navItems = [
   },
 ];
 
+const adminItems = [
+  { title: "用户管理", href: "/settings/users", icon: Users },
+  { title: "角色管理", href: "/settings/roles", icon: Key },
+  { title: "权限管理", href: "/settings/permissions", icon: Lock },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
 
   return (
     <aside
@@ -62,6 +81,33 @@ export function Sidebar() {
           const isActive = pathname === item.href ||
             (item.href !== "/" && pathname.startsWith(item.href));
 
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                collapsed && "justify-center px-2"
+              )}
+              title={collapsed ? item.title : undefined}
+            >
+              <item.icon className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>{item.title}</span>}
+            </Link>
+          );
+        })}
+        {isAdmin && !collapsed && (
+          <div className="pt-4 pb-1 px-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              系统管理
+            </p>
+          </div>
+        )}
+        {isAdmin && adminItems.map((item) => {
+          const isActive = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}

@@ -6,7 +6,7 @@ import {
   DynamicQueryBuilder,
   type FilterGroup,
 } from "@/lib/query/dynamic-query-builder";
-import { getReadableColumnsMap, getWritableColumnsMap, canAccessTable, getTablePermission } from "@/lib/auth/permissions";
+import { isAdmin, getReadableColumnsMap, getWritableColumnsMap, canAccessTable, getTablePermission } from "@/lib/auth/permissions";
 
 export async function GET(
   req: Request,
@@ -20,8 +20,29 @@ export async function GET(
   const { tableId } = await params;
 
   const table = await prisma.tableDefinition.findFirst({
-    where: { id: tableId, schema: { userId: session.user.id } },
-    include: { columns: { orderBy: { ordinalPosition: "asc" } } },
+    where: (await isAdmin(session.user.id))
+      ? { id: tableId }
+      : {
+          id: tableId,
+          OR: [
+            { schema: { userId: session.user.id } },
+            { tablePermissions: { some: { userId: session.user.id } } },
+          ],
+        },
+    include: {
+      columns: { orderBy: { ordinalPosition: "asc" } },
+      sourceForeignKeys: {
+        include: {
+          sourceColumns: { select: { physicalName: true } },
+          referencedTable: { select: { id: true, logicalName: true, physicalName: true } },
+        },
+      },
+      targetForeignKeys: {
+        include: {
+          table: { select: { id: true, logicalName: true, physicalName: true } },
+        },
+      },
+    },
   });
 
   if (!table) {
@@ -108,7 +129,7 @@ export async function GET(
       }
     }
 
-    const { sql } = queryBuilder.buildSelectQuery({
+    const { sql, countSql } = queryBuilder.buildSelectQuery({
       page,
       pageSize,
       sort,
@@ -117,18 +138,12 @@ export async function GET(
       columns: allowedColumns,
     });
 
-    // Execute both queries as a batch
-    const results = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql);
-
-    // The last result is the COUNT
-    const total = results.length > 0 ? (results[0] as unknown as { total: number }).total || 0 : 0;
-
-    // First result is the data
-    // Actually, with $queryRawUnsafe we get one result set
-    // For SQLite batch queries, we need to handle this differently
-    const rows = results.filter((r) => r && typeof r === "object" && "total" in r === false);
-    const countResult = results.find((r) => r && typeof r === "object" && "total" in r);
-    const totalCount = countResult ? Number((countResult as Record<string, unknown>).total) : 0;
+    // Execute data and count queries separately (SQLite only returns last result in batch)
+    const [rows, countResults] = await Promise.all([
+      prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql),
+      prisma.$queryRawUnsafe<Record<string, unknown>[]>(countSql),
+    ]);
+    const totalCount = countResults.length > 0 ? Number((countResults[0] as Record<string, unknown>).total) : 0;
 
     const visibleColumns = allowedColumns
       ? table.columns.filter((c) => allowedColumns.includes(c.physicalName))
@@ -136,14 +151,45 @@ export async function GET(
 
     const perm = await getTablePermission(tableId, session.user.id);
 
+    // Build FK info per column
+    const fkMap = new Map<string, {
+      constraintName: string;
+      referencedTableId: string;
+      referencedTableName: string;
+      referencedPhysicalName: string;
+      refColumnPhysicalNames: string[];
+    }>();
+
+    for (const fk of table.sourceForeignKeys) {
+      const refColPhys = fk.sourceColumns.map((sc) => sc.physicalName);
+      for (const colPhys of refColPhys) {
+        fkMap.set(colPhys, {
+          constraintName: fk.constraintName,
+          referencedTableId: fk.referencedTable.id,
+          referencedTableName: fk.referencedTable.logicalName,
+          referencedPhysicalName: fk.referencedTable.physicalName,
+          refColumnPhysicalNames: [],
+        });
+      }
+    }
+
+    // Target FKs (other tables referencing this one)
+    const targetFKs = table.targetForeignKeys.map((fk) => ({
+      constraintName: fk.constraintName,
+      sourceTableId: fk.table.id,
+      sourceTableName: fk.table.logicalName,
+      sourcePhysicalName: fk.table.physicalName,
+    }));
+
     return NextResponse.json({
       tableName: table.logicalName,
       columns: visibleColumns.map((c) => ({
         logicalName: c.logicalName,
         physicalName: c.physicalName,
         dataType: c.dataType,
+        foreignKeyInfo: fkMap.get(c.physicalName) || null,
       })),
-      rows: rows.length > 0 ? rows : results,
+      rows,
       total: totalCount,
       page,
       pageSize,
@@ -153,6 +199,7 @@ export async function GET(
         canUpdate: perm.canUpdate,
         canDelete: perm.canDelete,
       },
+      targetForeignKeys: targetFKs,
     });
   } catch (error) {
     console.error("Query error:", error);
@@ -187,7 +234,15 @@ export async function POST(
   const { tableId } = await params;
 
   const table = await prisma.tableDefinition.findFirst({
-    where: { id: tableId, schema: { userId: session.user.id } },
+    where: (await isAdmin(session.user.id))
+      ? { id: tableId }
+      : {
+          id: tableId,
+          OR: [
+            { schema: { userId: session.user.id } },
+            { tablePermissions: { some: { userId: session.user.id } } },
+          ],
+        },
   });
 
   if (!table || table.status === "DRAFT") {
@@ -240,7 +295,15 @@ export async function PUT(
   const { tableId } = await params;
 
   const table = await prisma.tableDefinition.findFirst({
-    where: { id: tableId, schema: { userId: session.user.id } },
+    where: (await isAdmin(session.user.id))
+      ? { id: tableId }
+      : {
+          id: tableId,
+          OR: [
+            { schema: { userId: session.user.id } },
+            { tablePermissions: { some: { userId: session.user.id } } },
+          ],
+        },
   });
 
   if (!table || table.status === "DRAFT") {
@@ -315,7 +378,15 @@ export async function DELETE(
   const { tableId } = await params;
 
   const table = await prisma.tableDefinition.findFirst({
-    where: { id: tableId, schema: { userId: session.user.id } },
+    where: (await isAdmin(session.user.id))
+      ? { id: tableId }
+      : {
+          id: tableId,
+          OR: [
+            { schema: { userId: session.user.id } },
+            { tablePermissions: { some: { userId: session.user.id } } },
+          ],
+        },
   });
 
   if (!table || table.status === "DRAFT") {

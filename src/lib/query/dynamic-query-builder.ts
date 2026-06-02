@@ -29,6 +29,7 @@ export class DynamicQueryBuilder {
 
   buildSelectQuery(options: QueryOptions): {
     sql: string;
+    countSql: string;
   } {
     const tableRef = `"${this.physicalName}"`;
     const page = Math.max(1, options.page);
@@ -47,12 +48,10 @@ export class DynamicQueryBuilder {
     const selectCols = options.columns && options.columns.length > 0
       ? options.columns.map((c) => `"${c.replace(/[^a-z0-9_一-鿿]/gi, "")}"`).join(", ")
       : "*";
-    const dataSQL = `SELECT ${selectCols} FROM ${tableRef} ${whereSQL} ${orderSQL} LIMIT ${pageSize} OFFSET ${offset}`;
-    const countSQL = `SELECT COUNT(*) as total FROM ${tableRef} ${whereSQL}`;
+    const sql = `SELECT ${selectCols} FROM ${tableRef} ${whereSQL} ${orderSQL} LIMIT ${pageSize} OFFSET ${offset}`;
+    const countSql = `SELECT COUNT(*) as total FROM ${tableRef} ${whereSQL}`;
 
-    return {
-      sql: `${dataSQL}; ${countSQL}`,
-    };
+    return { sql, countSql };
   }
 
   private buildWhereClause(filterGroup?: FilterGroup): string {

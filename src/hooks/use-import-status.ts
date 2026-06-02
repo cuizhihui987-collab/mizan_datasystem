@@ -13,7 +13,7 @@ export function useImportStatus(importId: string | null) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = query.state.data as any;
       if (!data) return 2000;
-      return data.status === "PROCESSING" ? 2000 : false;
+      return (data.status === "PROCESSING" || data.status === "QUEUED") ? 2000 : false;
     },
   });
 }

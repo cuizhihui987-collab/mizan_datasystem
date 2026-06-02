@@ -281,7 +281,7 @@ export function DDLDesigner({ schemaId, tableId }: DDLDesignerProps) {
         </TabsContent>
 
         <TabsContent value="foreign-keys" className="mt-4">
-          <ForeignKeyEditor />
+          <ForeignKeyEditor schemaId={schemaId} />
         </TabsContent>
 
         <TabsContent value="indexes" className="mt-4">

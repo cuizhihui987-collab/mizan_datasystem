@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { NextResponse } from "next/server";
 
 export interface TablePermissionInfo {
   isOwner: boolean;
@@ -24,6 +25,44 @@ export async function isAdmin(userId: string): Promise<boolean> {
     select: { role: true },
   });
   return user?.role === "ADMIN";
+}
+
+/**
+ * Require admin access — returns a 401/403 NextResponse if unauthorized, or null if allowed.
+ * Use in API routes: `const guard = await requireAdmin(session); if (guard) return guard;`
+ */
+export async function requireAdmin(session: { user?: { id?: string } } | null): Promise<NextResponse | null> {
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  }
+  if (!(await isAdmin(session.user.id))) {
+    return NextResponse.json({ error: "无权限，需要管理员身份" }, { status: 403 });
+  }
+  return null;
+}
+
+/**
+ * Check if a user has a specific system-level permission.
+ * Admins (checked via User.role === "ADMIN") always pass.
+ * Non-admin users are checked against their role assignments.
+ */
+export async function hasPermission(userId: string, permissionCode: string): Promise<boolean> {
+  // Legacy admin bypass
+  if (await isAdmin(userId)) return true;
+
+  const count = await prisma.userRole.count({
+    where: {
+      userId,
+      role: {
+        permissions: {
+          some: {
+            permission: { code: permissionCode },
+          },
+        },
+      },
+    },
+  });
+  return count > 0;
 }
 
 /**

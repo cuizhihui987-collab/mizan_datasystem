@@ -57,6 +57,19 @@ interface ExportColumnConfig {
   headerName: string;
   width: number;
   selected: boolean;
+  isImage?: boolean;
+}
+
+interface ComputedColumnConfig {
+  headerName: string;
+  expression: string;
+  width: number;
+}
+
+interface CustomStaticColumn {
+  headerName: string;
+  value: string;
+  width: number;
 }
 
 interface ExportTemplateConfig {
@@ -64,9 +77,22 @@ interface ExportTemplateConfig {
   filePattern: string;
   sheetName: string;
   headerPosition: "top" | "left";
-  logoImage?: string; // base64 data URL
+  logoImage?: string;
   logoWidth?: number;
   columns: ExportColumnConfig[];
+  computedColumns?: ComputedColumnConfig[];
+  customStaticColumns?: CustomStaticColumn[];
+  rowHeight?: number;
+  fontSize?: number;
+  headerFontSize?: number;
+  headerBgColor?: string;
+  headerFontColor?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  horizontalAlign?: "left" | "center" | "right";
+  verticalAlign?: "top" | "middle" | "bottom";
+  wrapText?: boolean;
+  mergedCells?: string[];
 }
 
 interface ExportTemplate {
@@ -102,6 +128,35 @@ export function ExportTemplateEditor({ schemaId }: { schemaId: string }) {
   const [logoImage, setLogoImage] = useState("");
   const [logoWidth, setLogoWidth] = useState(200);
   const [columns, setColumns] = useState<ExportColumnConfig[]>([]);
+  const [computedColumns, setComputedColumns] = useState<ComputedColumnConfig[]>([]);
+  const [customStaticColumns, setCustomStaticColumns] = useState<CustomStaticColumn[]>([]);
+  const [rowHeight, setRowHeight] = useState(20);
+  const [fontSize, setFontSize] = useState(10);
+  const [headerFontSize, setHeaderFontSize] = useState(11);
+  const [headerBgColor, setHeaderBgColor] = useState("FF4F81BD");
+  const [headerFontColor, setHeaderFontColor] = useState("FFFFFFFF");
+  const [imageWidth, setImageWidth] = useState(100);
+  const [imageHeight, setImageHeight] = useState(50);
+  const [horizontalAlign, setHorizontalAlign] = useState<"left" | "center" | "right">("left");
+  const [verticalAlign, setVerticalAlign] = useState<"top" | "middle" | "bottom">("middle");
+  const [wrapText, setWrapText] = useState(true);
+  const [mergedCellsText, setMergedCellsText] = useState("");
+  const [selectedTableId, setSelectedTableId] = useState<string>("");
+  const [tables, setTables] = useState<TableInfo[]>([]);
+
+  const loadTables = async () => {
+    try {
+      const tablesRes = await fetch(`/api/schemas/${schemaId}`);
+      const schemaData = await tablesRes.json();
+      const tbls = (schemaData.tables || []).filter(
+        (t: TableInfo) => t.status !== "DRAFT"
+      );
+      setTables(tbls);
+      if (tbls.length > 0 && !selectedTableId) {
+        setSelectedTableId(tbls[0].id);
+      }
+    } catch { /* ignore */ }
+  };
 
   const { data: templates, isLoading } = useQuery<ExportTemplate[]>({
     queryKey: ["templates", schemaId],
@@ -127,13 +182,29 @@ export function ExportTemplateEditor({ schemaId }: { schemaId: string }) {
     setLogoImage("");
     setLogoWidth(200);
     setColumns([]);
+    setComputedColumns([]);
+    setCustomStaticColumns([]);
+    setRowHeight(20);
+    setFontSize(10);
+    setHeaderFontSize(11);
+    setHeaderBgColor("FF4F81BD");
+    setHeaderFontColor("FFFFFFFF");
+    setImageWidth(100);
+    setImageHeight(50);
+    setHorizontalAlign("left");
+    setVerticalAlign("middle");
+    setWrapText(true);
+    setMergedCellsText("");
     setEditing(null);
   };
 
   const openNew = () => {
     resetForm();
     setDialogOpen(true);
-    setTimeout(loadTableColumns, 100);
+    setTimeout(() => {
+      loadTables();
+      setTimeout(() => loadTableColumns(), 100);
+    }, 50);
   };
 
   const openEdit = (tmpl: ExportTemplate) => {
@@ -147,6 +218,19 @@ export function ExportTemplateEditor({ schemaId }: { schemaId: string }) {
     setLogoImage(tmpl.config.logoImage || "");
     setLogoWidth(tmpl.config.logoWidth || 200);
     setColumns(tmpl.config.columns || []);
+    setComputedColumns(tmpl.config.computedColumns || []);
+    setCustomStaticColumns(tmpl.config.customStaticColumns || []);
+    setRowHeight(tmpl.config.rowHeight ?? 20);
+    setFontSize(tmpl.config.fontSize ?? 10);
+    setHeaderFontSize(tmpl.config.headerFontSize ?? 11);
+    setHeaderBgColor(tmpl.config.headerBgColor || "FF4F81BD");
+    setHeaderFontColor(tmpl.config.headerFontColor || "FFFFFFFF");
+    setImageWidth(tmpl.config.imageWidth ?? 100);
+    setImageHeight(tmpl.config.imageHeight ?? 50);
+    setHorizontalAlign(tmpl.config.horizontalAlign || "left");
+    setVerticalAlign(tmpl.config.verticalAlign || "middle");
+    setWrapText(tmpl.config.wrapText !== false);
+    setMergedCellsText((tmpl.config.mergedCells || []).join("\n"));
     setDialogOpen(true);
   };
 
@@ -164,6 +248,19 @@ export function ExportTemplateEditor({ schemaId }: { schemaId: string }) {
       columns: columns
         .filter((c) => c.selected)
         .map((c) => ({ ...c, selected: true })),
+      computedColumns: computedColumns.filter((c) => c.headerName.trim() && c.expression.trim()),
+      customStaticColumns: customStaticColumns.filter((c) => c.headerName.trim()),
+      rowHeight,
+      fontSize,
+      headerFontSize,
+      headerBgColor,
+      headerFontColor,
+      imageWidth,
+      imageHeight,
+      horizontalAlign,
+      verticalAlign,
+      wrapText,
+      mergedCells: mergedCellsText.split("\n").map((s) => s.trim()).filter(Boolean),
     };
     if (logoImage) {
       config.logoImage = logoImage;
@@ -200,14 +297,11 @@ export function ExportTemplateEditor({ schemaId }: { schemaId: string }) {
     }
   };
 
-  const loadTableColumns = async () => {
+  const loadTableColumns = async (tableId?: string) => {
+    const tid = tableId || selectedTableId;
+    if (!tid) return;
     try {
-      const tablesRes = await fetch(`/api/schemas/${schemaId}`);
-      const schemaData = await tablesRes.json();
-      const tables = (schemaData.tables || []) as TableInfo[];
-      if (tables.length === 0) return;
-
-      const tableRes = await fetch(`/api/tables/${tables[0].id}`);
+      const tableRes = await fetch(`/api/tables/${tid}`);
       const tableData = await tableRes.json();
       const cols: Array<{ logicalName: string; physicalName: string }> = (
         tableData.columns || []
@@ -259,12 +353,13 @@ export function ExportTemplateEditor({ schemaId }: { schemaId: string }) {
               新建模板
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+          <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>{editing ? "编辑模板" : "新建导出模板"}</DialogTitle>
             </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto space-y-4 py-2">
+            <div className="flex-1 flex gap-4 overflow-hidden min-h-0">
+              <div className="w-1/2 overflow-y-auto space-y-4 py-2 pr-2">
               {/* Basic info */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -339,6 +434,29 @@ export function ExportTemplateEditor({ schemaId }: { schemaId: string }) {
                 </div>
               </div>
 
+              {/* Table selector */}
+              <div>
+                <label className="text-sm font-medium block mb-1">选择数据表</label>
+                <Select
+                  value={selectedTableId}
+                  onValueChange={(v) => {
+                    setSelectedTableId(v);
+                    loadTableColumns(v);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择数据表" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tables.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.logicalName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Logo upload */}
               <div>
                 <label className="text-sm font-medium block mb-1">公司 Logo (可选)</label>
@@ -388,6 +506,147 @@ export function ExportTemplateEditor({ schemaId }: { schemaId: string }) {
                 </div>
               </div>
 
+              {/* ─── Style Settings ─── */}
+              <details className="border rounded-md">
+                <summary className="text-sm font-medium p-3 cursor-pointer hover:bg-muted/50">
+                  样式设置
+                </summary>
+                <div className="p-3 border-t space-y-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[11px] font-medium block mb-1">行高</label>
+                      <Input type="number" value={rowHeight} onChange={(e) => setRowHeight(Number(e.target.value) || 20)} className="h-7 text-xs" min={10} max={200} />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium block mb-1">数据字号</label>
+                      <Input type="number" value={fontSize} onChange={(e) => setFontSize(Number(e.target.value) || 10)} className="h-7 text-xs" min={6} max={72} />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium block mb-1">表头字号</label>
+                      <Input type="number" value={headerFontSize} onChange={(e) => setHeaderFontSize(Number(e.target.value) || 11)} className="h-7 text-xs" min={6} max={72} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-medium block mb-1">表头背景色</label>
+                      <div className="flex gap-2">
+                        <input type="color" value={`#${headerBgColor.slice(2)}`} onChange={(e) => setHeaderBgColor("FF" + e.target.value.slice(1))} className="h-7 w-10 p-0.5 cursor-pointer border rounded" />
+                        <Input value={headerBgColor} onChange={(e) => setHeaderBgColor(e.target.value)} className="h-7 text-[10px] font-mono flex-1" />
+                      </div>
+                      <div className="flex gap-1 mt-1">
+                        {["FF4F81BD", "FF2E75B6", "FF4472C4", "FF548235", "FFBF8F00", "FF843C0C", "FFC00000", "FF404040"].map((c) => (
+                          <button key={c} type="button" className={`w-4 h-4 rounded-sm border cursor-pointer ${headerBgColor === c ? "ring-2 ring-offset-1 ring-primary" : ""}`} style={{ backgroundColor: `#${c.slice(2)}` }} onClick={() => setHeaderBgColor(c)} />
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium block mb-1">表头字体色</label>
+                      <div className="flex gap-2">
+                        <input type="color" value={`#${headerFontColor.slice(2)}`} onChange={(e) => setHeaderFontColor("FF" + e.target.value.slice(1))} className="h-7 w-10 p-0.5 cursor-pointer border rounded" />
+                        <Input value={headerFontColor} onChange={(e) => setHeaderFontColor(e.target.value)} className="h-7 text-[10px] font-mono flex-1" />
+                      </div>
+                      <div className="flex gap-1 mt-1">
+                        {["FFFFFFFF", "FF000000", "FF333333", "FF4472C4", "FFC00000"].map((c) => (
+                          <button key={c} type="button" className={`w-4 h-4 rounded-sm border cursor-pointer ${headerFontColor === c ? "ring-2 ring-offset-1 ring-primary" : ""}`} style={{ backgroundColor: `#${c.slice(2)}`, border: c === "FFFFFFFF" ? "1px solid #ccc" : undefined }} onClick={() => setHeaderFontColor(c)} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-medium block mb-1">图片宽度 (px)</label>
+                      <Input type="number" value={imageWidth} onChange={(e) => setImageWidth(Number(e.target.value) || 100)} className="h-7 text-xs" min={20} max={800} />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium block mb-1">图片高度 (px)</label>
+                      <Input type="number" value={imageHeight} onChange={(e) => setImageHeight(Number(e.target.value) || 50)} className="h-7 text-xs" min={20} max={800} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[11px] font-medium block mb-1">水平对齐</label>
+                      <select value={horizontalAlign} onChange={(e) => setHorizontalAlign(e.target.value as "left" | "center" | "right")} className="h-7 text-xs w-full rounded-md border border-input bg-background px-2">
+                        <option value="left">左对齐</option>
+                        <option value="center">居中</option>
+                        <option value="right">右对齐</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium block mb-1">垂直对齐</label>
+                      <select value={verticalAlign} onChange={(e) => setVerticalAlign(e.target.value as "top" | "middle" | "bottom")} className="h-7 text-xs w-full rounded-md border border-input bg-background px-2">
+                        <option value="top">顶部</option>
+                        <option value="middle">居中</option>
+                        <option value="bottom">底部</option>
+                      </select>
+                    </div>
+                    <div className="flex items-end pb-1">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={wrapText} onChange={(e) => setWrapText(e.target.checked)} className="h-4 w-4" />
+                        <span className="text-[11px] font-medium">自动换行</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium block mb-1">合并单元格</label>
+                    <textarea
+                      value={mergedCellsText}
+                      onChange={(e) => setMergedCellsText(e.target.value)}
+                      className="h-14 text-xs w-full rounded-md border border-input bg-background px-2 py-1 resize-none"
+                      placeholder={"A1:E1\nA2:C2"}
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-0.5">每行一个区域，例如 A1:E1</p>
+                  </div>
+                </div>
+              </details>
+
+              {/* ─── Custom Static Columns ─── */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">自定义静态列</label>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setCustomStaticColumns((prev) => [...prev, { headerName: "", value: "", width: 20 }])}>
+                    <Plus className="h-3 w-3 mr-1" />
+                    添加静态列
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mb-2">所有行输出相同的固定值</p>
+                {customStaticColumns.length === 0 ? (
+                  <div className="border rounded-md p-4 text-center text-sm text-muted-foreground">暂无静态列</div>
+                ) : (
+                  <div className="border rounded-md overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-2 font-medium">列名</th>
+                          <th className="text-left p-2 font-medium">固定值</th>
+                          <th className="text-left p-2 font-medium w-20">列宽</th>
+                          <th className="p-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customStaticColumns.map((sc, idx) => (
+                          <tr key={idx} className="border-b last:border-0 hover:bg-muted/20">
+                            <td className="p-2">
+                              <Input value={sc.headerName} onChange={(e) => setCustomStaticColumns((prev) => prev.map((c, i) => (i === idx ? { ...c, headerName: e.target.value } : c)))} className="h-7 text-xs" placeholder="例如: 备注" />
+                            </td>
+                            <td className="p-2">
+                              <Input value={sc.value} onChange={(e) => setCustomStaticColumns((prev) => prev.map((c, i) => (i === idx ? { ...c, value: e.target.value } : c)))} className="h-7 text-xs" placeholder="固定文本" />
+                            </td>
+                            <td className="p-2">
+                              <Input type="number" value={sc.width} onChange={(e) => setCustomStaticColumns((prev) => prev.map((c, i) => (i === idx ? { ...c, width: parseInt(e.target.value) || 20 } : c)))} className="h-7 text-xs w-16" min={5} max={100} />
+                            </td>
+                            <td className="p-2">
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => setCustomStaticColumns((prev) => prev.filter((_, i) => i !== idx))}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
               {/* Column config */}
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -410,6 +669,7 @@ export function ExportTemplateEditor({ schemaId }: { schemaId: string }) {
                           <th className="text-left p-2 font-medium">物理名</th>
                           <th className="text-left p-2 font-medium">导出列名</th>
                           <th className="text-left p-2 font-medium w-20">列宽</th>
+                          <th className="text-center p-2 font-medium w-16">图片列</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -456,12 +716,275 @@ export function ExportTemplateEditor({ schemaId }: { schemaId: string }) {
                                 disabled={!col.selected}
                               />
                             </td>
+                            <td className="p-2 text-center">
+                              <Checkbox
+                                checked={col.isImage || false}
+                                disabled={!col.selected}
+                                onCheckedChange={() =>
+                                  setColumns((prev) =>
+                                    prev.map((c, i) => (i === idx ? { ...c, isImage: !c.isImage } : c))
+                                  )
+                                }
+                              />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                 )}
+              </div>
+
+              {/* Computed columns */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">计算列</label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() =>
+                      setComputedColumns((prev) => [
+                        ...prev,
+                        { headerName: "", expression: "", width: 20 },
+                      ])
+                    }
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    添加计算列
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mb-2">
+                  使用 {'{列名}'} 引用导出列的数值，例如: {'{最低起订量}'} / {'{装箱量}'}
+                </p>
+                {computedColumns.length === 0 ? (
+                  <div className="border rounded-md p-4 text-center text-sm text-muted-foreground">
+                    暂无计算列
+                  </div>
+                ) : (
+                  <div className="border rounded-md overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-2 font-medium">列名</th>
+                          <th className="text-left p-2 font-medium">公式</th>
+                          <th className="text-left p-2 font-medium w-20">列宽</th>
+                          <th className="p-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {computedColumns.map((cc, idx) => (
+                          <tr key={idx} className="border-b last:border-0 hover:bg-muted/20">
+                            <td className="p-2">
+                              <Input
+                                value={cc.headerName}
+                                onChange={(e) =>
+                                  setComputedColumns((prev) =>
+                                    prev.map((c, i) => (i === idx ? { ...c, headerName: e.target.value } : c))
+                                  )
+                                }
+                                className="h-7 text-xs"
+                                placeholder="例如: 起订箱数"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  value={cc.expression}
+                                  onChange={(e) =>
+                                    setComputedColumns((prev) =>
+                                      prev.map((c, i) => (i === idx ? { ...c, expression: e.target.value } : c))
+                                    )
+                                  }
+                                  className="h-7 text-xs font-mono flex-1"
+                                  placeholder={'例如: {最低起订量}/{装箱量}'}
+                                />
+                                {columns.filter((c) => c.selected).length > 0 && (
+                                  <div className="relative group">
+                                    <Button variant="outline" size="sm" className="h-7 text-xs px-2">
+                                      {'{列}'}
+                                    </Button>
+                                    <div className="absolute right-0 top-full mt-1 bg-popover border rounded-md shadow-lg z-10 hidden group-hover:block min-w-[140px]">
+                                      {columns.filter((c) => c.selected).map((c) => (
+                                        <button
+                                          key={c.physicalName}
+                                          className="block w-full text-left px-3 py-1.5 text-xs hover:bg-accent font-mono"
+                                          onClick={() =>
+                                            setComputedColumns((prev) =>
+                                              prev.map((col, i) =>
+                                                i === idx
+                                                  ? { ...col, expression: col.expression + `{${c.headerName}}` }
+                                                  : col
+                                              )
+                                            )
+                                          }
+                                        >
+                                          {c.headerName}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                type="number"
+                                value={cc.width}
+                                onChange={(e) =>
+                                  setComputedColumns((prev) =>
+                                    prev.map((c, i) => (i === idx ? { ...c, width: parseInt(e.target.value) || 20 } : c))
+                                  )
+                                }
+                                className="h-7 text-xs w-16"
+                                min={5}
+                                max={100}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                onClick={() =>
+                                  setComputedColumns((prev) => prev.filter((_, i) => i !== idx))
+                                }
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              </div>
+              {/* end left column */}
+
+              {/* ─── Right: Preview Panel ─── */}
+              <div className="w-1/2 overflow-y-auto py-2 pl-2 border-l">
+                <div className="sticky top-0 bg-background pb-2 z-10">
+                  <label className="text-sm font-medium">预览效果</label>
+                  <p className="text-[10px] text-muted-foreground">显示 3 行占位数据</p>
+                </div>
+                <div className="overflow-auto border rounded-md" style={{ maxHeight: "calc(90vh - 200px)" }}>
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr>
+                        {columns.filter(c => c.selected).map((col) => (
+                          <th
+                            key={col.physicalName}
+                            style={{
+                              backgroundColor: `#${headerBgColor.slice(2)}`,
+                              color: `#${headerFontColor.slice(2)}`,
+                              fontSize: `${headerFontSize}px`,
+                              fontWeight: "bold",
+                              padding: "4px 6px",
+                              border: "1px solid #ccc",
+                              whiteSpace: "nowrap",
+                              width: col.width ? `${col.width * 6}px` : "auto",
+                            }}
+                          >
+                            {col.headerName || col.physicalName}
+                          </th>
+                        ))}
+                        {computedColumns.filter(c => c.headerName.trim()).map((cc, i) => (
+                          <th key={`cc-${i}`}
+                            style={{
+                              backgroundColor: `#${headerBgColor.slice(2)}`,
+                              color: `#${headerFontColor.slice(2)}`,
+                              fontSize: `${headerFontSize}px`,
+                              fontWeight: "bold",
+                              padding: "4px 6px",
+                              border: "1px solid #ccc",
+                              whiteSpace: "nowrap",
+                              width: cc.width ? `${cc.width * 6}px` : "auto",
+                            }}
+                          >{cc.headerName}</th>
+                        ))}
+                        {customStaticColumns.filter(c => c.headerName.trim()).map((sc, i) => (
+                          <th key={`sc-${i}`}
+                            style={{
+                              backgroundColor: `#${headerBgColor.slice(2)}`,
+                              color: `#${headerFontColor.slice(2)}`,
+                              fontSize: `${headerFontSize}px`,
+                              fontWeight: "bold",
+                              padding: "4px 6px",
+                              border: "1px solid #ccc",
+                              whiteSpace: "nowrap",
+                              width: sc.width ? `${sc.width * 6}px` : "auto",
+                            }}
+                          >{sc.headerName}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[1, 2, 3].map((ri) => (
+                        <tr key={ri} style={{ height: `${Math.max(rowHeight, 20)}px` }}>
+                          {columns.filter(c => c.selected).map((col) => (
+                            <td
+                              key={col.physicalName}
+                              style={{
+                                fontSize: `${fontSize}px`,
+                                padding: "2px 6px",
+                                border: "1px solid #ddd",
+                                textAlign: horizontalAlign,
+                                verticalAlign,
+                                whiteSpace: wrapText ? "normal" : "nowrap",
+                              }}
+                            >
+                              {col.isImage ? (
+                                <div
+                                  style={{
+                                    width: `${imageWidth}px`,
+                                    height: `${imageHeight}px`,
+                                    background: "#e0e0e0",
+                                    border: "1px dashed #999",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: "9px",
+                                    color: "#666",
+                                  }}
+                                >
+                                  {imageWidth}×{imageHeight}
+                                </div>
+                              ) : (
+                                <span style={{ color: "#999" }}>示例数据{ri}</span>
+                              )}
+                            </td>
+                          ))}
+                          {computedColumns.filter(c => c.headerName.trim()).map((_cc, i) => (
+                            <td key={`cc-${i}`}
+                              style={{
+                                fontSize: `${fontSize}px`,
+                                padding: "2px 6px",
+                                border: "1px solid #ddd",
+                                textAlign: horizontalAlign,
+                                verticalAlign,
+                                whiteSpace: wrapText ? "normal" : "nowrap",
+                              }}
+                            ><span style={{ color: "#bbb" }}>=公式({ri})</span></td>
+                          ))}
+                          {customStaticColumns.filter(c => c.headerName.trim()).map((sc, i) => (
+                            <td key={`sc-${i}`}
+                              style={{
+                                fontSize: `${fontSize}px`,
+                                padding: "2px 6px",
+                                border: "1px solid #ddd",
+                                textAlign: horizontalAlign,
+                                verticalAlign,
+                                whiteSpace: wrapText ? "normal" : "nowrap",
+                              }}
+                            >{sc.value || <span style={{ color: "#bbb" }}>固定值</span>}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 
@@ -477,7 +1000,7 @@ export function ExportTemplateEditor({ schemaId }: { schemaId: string }) {
         </Dialog>
       </div>
 
-      {(!templates || templates.length === 0) ? (
+      {(!Array.isArray(templates) || templates.length === 0) ? (
         <Card>
           <CardContent className="py-12 text-center">
             <FileDown className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -674,7 +1197,8 @@ export function ExportWithTemplateDialog({ schemaId, tableId, tables: externalTa
     setFilters((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const selectedTmpl = templates?.find((t) => t.id === selectedTemplate);
+  const tmplList = Array.isArray(templates) ? templates : [];
+  const selectedTmpl = tmplList.find((t) => t.id === selectedTemplate);
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setSelectedTemplate(""); setFilters([]); } }}>
@@ -794,7 +1318,7 @@ export function ExportWithTemplateDialog({ schemaId, tableId, tables: externalTa
               <div className="text-center py-4">
                 <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
               </div>
-            ) : !templates || templates.length === 0 ? (
+            ) : !Array.isArray(templates) || templates.length === 0 ? (
               <p className="text-sm text-muted-foreground">暂无导出模板，请先在 Schema 页面创建</p>
             ) : (
               <div className="space-y-1.5 max-h-48 overflow-y-auto">

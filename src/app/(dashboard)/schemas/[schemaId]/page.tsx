@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Plus, Table, Trash2, FileSpreadsheet, BarChart3, Eye, Terminal, FileDown, BookOpen } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { ArrowLeft, Plus, Table, Trash2, Pencil, FileSpreadsheet, BarChart3, Eye, Terminal, FileDown, BookOpen } from "lucide-react";
 import { ViewEditor } from "@/components/schema/view-editor";
 import { ScriptEditor } from "@/components/schema/script-editor";
 import { ExportTemplateEditor } from "@/components/schema/export-template-editor";
@@ -18,6 +39,7 @@ interface TableDef {
   logicalName: string;
   physicalName: string;
   status: string;
+  color: string | null;
   _count: { columns: number };
 }
 
@@ -26,13 +48,18 @@ interface SchemaDetail {
   name: string;
   description: string | null;
   status: string;
+  createdAt: string;
   tables: TableDef[];
+  user?: { name: string | null; email: string | null };
 }
 
 export default function SchemaDetailPage() {
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [deletingTable, setDeletingTable] = useState<TableDef | null>(null);
+  const [renamingTable, setRenamingTable] = useState<TableDef | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const { data: schema, isLoading } = useQuery<SchemaDetail>({
     queryKey: ["schema", params.schemaId],
@@ -46,11 +73,54 @@ export default function SchemaDetailPage() {
     },
   });
 
-  const deleteTableMutation = useMutation({
-    mutationFn: (tableId: string) =>
-      fetch(`/api/tables/${tableId}`, { method: "DELETE" }).then((r) => r.json()),
+  const colorMutation = useMutation({
+    mutationFn: async ({ tableId, color }: { tableId: string; color: string | null }) => {
+      const res = await fetch(`/api/tables/${tableId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ color }),
+      });
+      if (!res.ok) throw new Error("更新颜色失败");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schema", params.schemaId] });
+    },
+  });
+
+  const renameTableMutation = useMutation({
+    mutationFn: async ({ tableId, logicalName }: { tableId: string; logicalName: string }) => {
+      const res = await fetch(`/api/tables/${tableId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logicalName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "重命名失败");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["schema", params.schemaId] });
+      toast.success("表名已更新");
+      setRenamingTable(null);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "重命名失败");
+    },
+  });
+
+  const deleteTableMutation = useMutation({
+    mutationFn: async (tableId: string) => {
+      const res = await fetch(`/api/tables/${tableId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "删除失败");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["schema", params.schemaId] });
+      toast.success("表已删除");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "删除失败");
     },
   });
 
@@ -107,6 +177,11 @@ export default function SchemaDetailPage() {
           {schema.description && (
             <p className="text-muted-foreground mt-1">{schema.description}</p>
           )}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+            <span>{schema.user?.name || schema.user?.email || "未知用户"}</span>
+            <span className="text-muted-foreground/50">|</span>
+            <span>创建于 {new Date(schema.createdAt).toLocaleDateString("zh-CN")}</span>
+          </div>
         </div>
         <Button variant="outline" asChild>
           <Link href={`/schemas/${params.schemaId}/import`}>
@@ -161,10 +236,44 @@ export default function SchemaDetailPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {schema.tables.map((table) => (
-                <Card key={table.id}>
+                <Card key={table.id} className="group">
                   <CardHeader className="flex flex-row items-start justify-between">
                     <div>
-                      <CardTitle className="text-lg">{table.logicalName}</CardTitle>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <div className="relative group/color">
+                          <button
+                            className="h-4 w-4 rounded-full border border-muted-foreground/30 shrink-0 cursor-pointer"
+                            style={{ backgroundColor: table.color || "#e5e7eb" }}
+                            onClick={() => {
+                              const input = document.createElement("input");
+                              input.type = "color";
+                              input.value = table.color || "#3B82F6";
+                              input.oninput = () => colorMutation.mutate({ tableId: table.id, color: input.value });
+                              input.click();
+                            }}
+                            title="标记颜色"
+                          />
+                          {table.color && (
+                            <button
+                              className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-destructive text-destructive-foreground text-[8px] leading-none flex items-center justify-center opacity-0 group-hover/color:opacity-100 transition-opacity"
+                              onClick={(e) => { e.stopPropagation(); colorMutation.mutate({ tableId: table.id, color: null }); }}
+                              title="移除颜色"
+                            >×</button>
+                          )}
+                        </div>
+                        {table.logicalName}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => {
+                            setRenamingTable(table);
+                            setRenameValue(table.logicalName);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      </CardTitle>
                       <p className="text-xs text-muted-foreground mt-1 font-mono">
                         {table.physicalName}
                       </p>
@@ -196,13 +305,33 @@ export default function SchemaDetailPage() {
                             </Button>
                           </>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteTableMutation.mutate(table.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <AlertDialog open={deletingTable?.id === table.id} onOpenChange={(open) => !open && setDeletingTable(null)}>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="sm" onClick={() => setDeletingTable(table)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>确认删除</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                确定要删除表「{table.logicalName}」吗？此操作不可撤销，所有数据将被永久删除。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel onClick={() => setDeletingTable(null)}>取消</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => {
+                                  setDeletingTable(null);
+                                  deleteTableMutation.mutate(table.id);
+                                }}
+                                className="bg-destructive hover:bg-destructive/90"
+                              >
+                                删除
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </div>
                   </CardContent>
@@ -235,6 +364,41 @@ export default function SchemaDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+      <Dialog open={!!renamingTable} onOpenChange={(open) => { if (!open) setRenamingTable(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>重命名表</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && renamingTable && renameValue.trim()) {
+                  renameTableMutation.mutate({ tableId: renamingTable.id, logicalName: renameValue.trim() });
+                }
+              }}
+              placeholder="输入新的表名"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenamingTable(null)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                if (renamingTable && renameValue.trim()) {
+                  renameTableMutation.mutate({ tableId: renamingTable.id, logicalName: renameValue.trim() });
+                }
+              }}
+              disabled={!renameValue.trim() || renameTableMutation.isPending}
+            >
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -27,6 +27,7 @@ export default function ImportsPage() {
   const statusBadge = (status: string) => {
     const map: Record<string, "default" | "secondary" | "success" | "destructive" | "warning"> = {
       PENDING: "secondary",
+      QUEUED: "warning",
       PROCESSING: "warning",
       COMPLETED: "success",
       FAILED: "destructive",
@@ -34,6 +35,7 @@ export default function ImportsPage() {
     };
     const labels: Record<string, string> = {
       PENDING: "等待中",
+      QUEUED: "排队中",
       PROCESSING: "处理中",
       COMPLETED: "已完成",
       FAILED: "失败",

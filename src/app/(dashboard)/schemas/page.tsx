@@ -17,6 +17,7 @@ interface Schema {
   status: string;
   createdAt: string;
   _count: { tables: number };
+  user?: { name: string | null; email: string | null };
 }
 
 export default function SchemasPage() {
@@ -145,11 +146,12 @@ export default function SchemasPage() {
                 </Badge>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    {schema._count.tables} 个数据表
-                  </span>
-                  <div className="flex gap-2">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      {schema._count.tables} 个数据表
+                    </span>
+                    <div className="flex gap-2">
                     <Button variant="ghost" size="sm" asChild>
                       <Link href={`/schemas/${schema.id}`}>
                         <ExternalLink className="h-4 w-4 mr-1" />
@@ -164,6 +166,12 @@ export default function SchemasPage() {
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
+                    <span>{schema.user?.name || schema.user?.email || "未知用户"}</span>
+                    <span className="text-muted-foreground/50">|</span>
+                    <span>{new Date(schema.createdAt).toLocaleDateString("zh-CN")}</span>
+                  </div>
+                </div>
                 </div>
               </CardContent>
             </Card>

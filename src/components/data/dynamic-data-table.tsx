@@ -53,10 +53,46 @@ import { FilterDialog, FilterBadges } from "@/components/data/filter-dialog";
 import { ExportWithTemplateDialog } from "@/components/schema/export-template-editor";
 import { PermissionDialog } from "@/components/data/permission-dialog";
 
+interface ForeignKeyInfo {
+  constraintName: string;
+  referencedTableId: string;
+  referencedTableName: string;
+  referencedPhysicalName: string;
+}
+
+interface TargetFKInfo {
+  constraintName: string;
+  sourceTableId: string;
+  sourceTableName: string;
+  sourcePhysicalName: string;
+}
+
 interface ColumnMeta {
   logicalName: string;
   physicalName: string;
   dataType: string;
+  foreignKeyInfo: ForeignKeyInfo | null;
+}
+
+interface RelatedData {
+  rowId: string;
+  currentRow: Record<string, unknown>;
+  sourceFKs: Array<{
+    constraintName: string;
+    referencedTableId: string;
+    referencedTableName: string;
+    columns: Array<{
+      sourceColumn: string;
+      sourceValue: unknown;
+      refData: Record<string, unknown> | null;
+    }>;
+  }>;
+  targetFKs: Array<{
+    constraintName: string;
+    sourceTableId: string;
+    sourceTableName: string;
+    referencingCount: number;
+  }>;
 }
 
 interface DynamicDataTableProps {
@@ -91,7 +127,7 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
   const columns: ColumnMeta[] = data?.columns || [];
   const rows = data?.rows || [];
   const total = data?.total || 0;
-  const totalPages = Math.ceil(total / pageSize);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const isOwner = data?.permissions?.isOwner ?? true;
   const canInsert = data?.permissions?.canInsert ?? true;
   const canUpdate = data?.permissions?.canUpdate ?? true;
@@ -109,6 +145,14 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
 
   // Batch update dialog
   const [batchUpdateOpen, setBatchUpdateOpen] = useState(false);
+
+  // Row edit dialog
+  const [editingRow, setEditingRow] = useState<{ rowId: number; data: Record<string, unknown> } | null>(null);
+
+  // Related data dialog
+  const [relatedRow, setRelatedRow] = useState<{ rowId: number; col: ColumnMeta } | null>(null);
+  const [relatedData, setRelatedData] = useState<RelatedData | null>(null);
+  const [loadingRelated, setLoadingRelated] = useState(false);
 
   // Export
   const [exporting, setExporting] = useState(false);
@@ -388,6 +432,19 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
               onSuccess={invalidate}
             />
           )}
+          {canUpdate && editingRow && (
+            <EditRowDialog
+              tableId={tableId}
+              columns={columns}
+              rowData={editingRow.data}
+              rowId={editingRow.rowId}
+              onSuccess={() => {
+                setEditingRow(null);
+                invalidate();
+              }}
+              onClose={() => setEditingRow(null)}
+            />
+          )}
         </div>
       </div>
 
@@ -434,7 +491,10 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
                     className="text-left p-2 font-medium cursor-pointer hover:bg-accent/50 whitespace-nowrap"
                     onClick={() => setSort(col.physicalName)}
                   >
-                    <div className="flex items-center">
+                    <div className="flex items-center gap-1">
+                      {col.foreignKeyInfo && (
+                        <span className="text-[10px] text-blue-500 font-bold" title={`关联: ${col.foreignKeyInfo.referencedTableName}`}>🔗</span>
+                      )}
                       {col.logicalName}
                       <SortIcon col={col.physicalName} />
                     </div>
@@ -520,6 +580,24 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
                                 className="h-7 text-sm px-1"
                                 autoFocus
                               />
+                            ) : col.foreignKeyInfo && row[col.physicalName] !== null && row[col.physicalName] !== undefined ? (
+                              <button
+                                className="text-blue-600 hover:text-blue-800 hover:underline text-left w-full truncate"
+                                onClick={() => {
+                                  setRelatedRow({ rowId, col });
+                                  setLoadingRelated(true);
+                                  fetch(`/api/tables/${tableId}/related-data/${row[col.physicalName]}`)
+                                    .then((r) => r.json())
+                                    .then((data) => {
+                                      setRelatedData(data);
+                                      setLoadingRelated(false);
+                                    })
+                                    .catch(() => setLoadingRelated(false));
+                                }}
+                                title={`查看关联数据: ${col.foreignKeyInfo.referencedTableName}`}
+                              >
+                                {formatCellValue(row[col.physicalName], col.dataType)}
+                              </button>
                             ) : (
                               formatCellValue(
                                 row[col.physicalName],
@@ -536,14 +614,8 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0"
-                              onClick={() =>
-                                startEditing(
-                                  rowId,
-                                  userColumns[0]?.physicalName || "",
-                                  row[userColumns[0]?.physicalName || ""]
-                                )
-                              }
-                              title="编辑"
+                              onClick={() => setEditingRow({ rowId, data: { ...row } })}
+                              title="编辑行"
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
@@ -571,7 +643,7 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
       )}
 
       {/* Pagination */}
-      {total > 0 && (
+      {data && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <span>共 {total} 条</span>
@@ -763,6 +835,90 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Target FKs display */}
+      {data?.targetForeignKeys && data.targetForeignKeys.length > 0 && (
+        <div className="border rounded-md p-3 bg-muted/20">
+          <p className="text-xs font-medium text-muted-foreground mb-1">被以下表引用</p>
+          <div className="flex flex-wrap gap-2">
+            {data.targetForeignKeys.map((tfk: TargetFKInfo, i: number) => (
+              <span key={i} className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                {tfk.sourceTableName}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Related data dialog */}
+      <Dialog open={!!relatedRow} onOpenChange={(open) => { if (!open) { setRelatedRow(null); setRelatedData(null); } }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>
+              关联数据
+              {relatedRow && (
+                <span className="text-sm font-normal text-muted-foreground ml-2">
+                  {relatedRow.col.logicalName} → {relatedRow.col.foreignKeyInfo?.referencedTableName}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-4">
+            {loadingRelated ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">加载中...</div>
+            ) : relatedData ? (
+              <>
+                {relatedData.sourceFKs.length === 0 && relatedData.targetFKs.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">无关联数据</p>
+                ) : (
+                  <>
+                    {relatedData.sourceFKs.map((sfk, i) => (
+                      <div key={i} className="border rounded-md overflow-hidden">
+                        <div className="bg-muted/50 px-3 py-1.5 text-sm font-medium flex items-center gap-2">
+                          引用: {sfk.referencedTableName}
+                          <span className="text-xs text-muted-foreground">({sfk.constraintName})</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b bg-muted/20">
+                                {sfk.columns[0]?.refData && Object.keys(sfk.columns[0].refData).map((key) => (
+                                  <th key={key} className="text-left p-2 font-medium whitespace-nowrap">{key}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sfk.columns.map((col, ci) => (
+                                <tr key={ci} className="border-b last:border-0">
+                                  {col.refData ? Object.values(col.refData).map((val, vi) => (
+                                    <td key={vi} className="p-2 truncate max-w-[200px]">{String(val ?? "")}</td>
+                                  )) : (
+                                    <td className="p-2 text-muted-foreground italic">无匹配数据</td>
+                                  )}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+                    {relatedData.targetFKs.map((tfk, i) => (
+                      <div key={i} className="border rounded-md p-3 text-sm">
+                        <span className="font-medium">{tfk.sourceTableName}</span>
+                        <span className="text-muted-foreground ml-2">
+                          有 {tfk.referencingCount} 行数据引用当前行
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </>
+            ) : (
+              <p className="py-4 text-center text-sm text-muted-foreground">加载失败</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -951,6 +1107,135 @@ function AddRowDialog({
           </DialogClose>
           <Button onClick={handleSubmit} disabled={saving}>
             {saving ? "添加中..." : "添加"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditRowDialog({
+  tableId,
+  columns,
+  rowData,
+  rowId,
+  onSuccess,
+  onClose,
+}: {
+  tableId: string;
+  columns: ColumnMeta[];
+  rowData: Record<string, unknown>;
+  rowId: number;
+  onSuccess: () => void;
+  onClose: () => void;
+}) {
+  const [formData, setFormData] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const col of columns) {
+      if (["_id", "_created_at", "_updated_at"].includes(col.physicalName)) continue;
+      initial[col.physicalName] = rowData[col.physicalName] === null || rowData[col.physicalName] === undefined
+        ? "" : String(rowData[col.physicalName]);
+    }
+    return initial;
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const userColumns = columns.filter(
+    (c) => !["_id", "_created_at", "_updated_at"].includes(c.physicalName)
+  );
+
+  const handleChange = (physicalName: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [physicalName]: value }));
+  };
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = { _id: rowId };
+      for (const col of userColumns) {
+        const val = formData[col.physicalName] ?? "";
+        if (val === "" && rowData[col.physicalName] === null) continue;
+        if (col.dataType === "INTEGER" || col.dataType === "BIGINT") {
+          body[col.physicalName] = val === "" ? null : parseInt(val, 10);
+        } else if (col.dataType === "FLOAT" || col.dataType === "DOUBLE") {
+          body[col.physicalName] = val === "" ? null : parseFloat(val);
+        } else {
+          body[col.physicalName] = val;
+        }
+      }
+
+      const res = await fetch(`/api/tables/${tableId}/data`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "保存失败");
+      }
+
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputType = (dataType: string) => {
+    switch (dataType) {
+      case "INTEGER":
+      case "BIGINT":
+      case "FLOAT":
+      case "DOUBLE":
+        return "number";
+      case "DATE":
+        return "date";
+      case "DATETIME":
+        return "datetime-local";
+      default:
+        return "text";
+    }
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>编辑行 #{rowId}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2 overflow-y-auto max-h-[55vh]">
+          {userColumns.length === 0 ? (
+            <p className="text-sm text-muted-foreground">没有可编辑的字段</p>
+          ) : (
+            userColumns.map((col) => (
+              <div key={col.physicalName}>
+                <label className="text-sm font-medium block mb-1">
+                  {col.logicalName}
+                  <span className="text-xs text-muted-foreground ml-2">
+                    ({col.dataType})
+                  </span>
+                </label>
+                <Input
+                  type={inputType(col.dataType)}
+                  value={formData[col.physicalName] || ""}
+                  onChange={(e) => handleChange(col.physicalName, e.target.value)}
+                  placeholder={`输入 ${col.logicalName}`}
+                />
+              </div>
+            ))
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <div className="flex justify-end gap-2 shrink-0">
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            取消
+          </Button>
+          <Button onClick={handleSubmit} disabled={saving}>
+            {saving ? "保存中..." : "保存"}
           </Button>
         </div>
       </DialogContent>

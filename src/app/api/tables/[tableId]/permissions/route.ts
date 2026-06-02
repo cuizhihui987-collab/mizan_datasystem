@@ -83,6 +83,7 @@ export async function POST(
   // Verify ownership (admin bypass)
   const table = await prisma.tableDefinition.findFirst({
     where: (await isAdmin(session.user.id)) ? { id: tableId } : { id: tableId, schema: { userId: session.user.id } },
+    select: { id: true, logicalName: true, schemaId: true },
   });
 
   if (!table) {
@@ -123,12 +124,10 @@ export async function POST(
 
   // Handle column permissions if provided
   if (columnPermissions && Array.isArray(columnPermissions)) {
-    // Delete existing column permissions
     await prisma.columnPermission.deleteMany({
       where: { tablePermissionId: perm.id },
     });
 
-    // Create new ones
     if (columnPermissions.length > 0) {
       await prisma.columnPermission.createMany({
         data: columnPermissions.map((cp: { columnId: string; canRead?: boolean; canWrite?: boolean }) => ({
@@ -140,6 +139,18 @@ export async function POST(
       });
     }
   }
+
+  // Send notification to the user about table access
+  const sharerName = session.user.name || session.user.email || "管理员";
+  await prisma.notification.create({
+    data: {
+      userId,
+      type: "table_shared",
+      title: "表权限授予",
+      message: `${sharerName} 授予了你访问表「${table.logicalName}」的权限`,
+      link: `/schemas/${table.schemaId}/tables/${table.id}/data`,
+    },
+  }).catch(() => {});
 
   return NextResponse.json({ success: true });
 }

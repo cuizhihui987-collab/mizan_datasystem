@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { SpreadsheetParser } from "./spreadsheet-parser";
+import { QueueProcessor } from "./queue-processor";
 import path from "path";
 
 interface ColumnMap {
@@ -22,12 +23,14 @@ export class DataImporter {
       },
     });
 
-    if (!job || !job.table || job.status !== "PENDING") return;
-
-    await prisma.importJob.update({
-      where: { id: jobId },
-      data: { status: "PROCESSING", startedAt: new Date() },
-    });
+    if (!job || !job.table) {
+      await prisma.importJob.update({
+        where: { id: jobId },
+        data: { status: "FAILED", errorLog: JSON.stringify([{ message: "关联表已被删除" }]) },
+      });
+      await QueueProcessor.drain();
+      return;
+    }
 
     try {
       const fullPath = path.join(process.cwd(), "public", job.filePath);
@@ -78,6 +81,8 @@ export class DataImporter {
         where: { id: job.table.id },
         data: { status: "IMPORTED" },
       });
+
+      await QueueProcessor.drain();
     } catch (error) {
       await prisma.importJob.update({
         where: { id: jobId },
@@ -88,6 +93,8 @@ export class DataImporter {
           ]),
         },
       });
+
+      await QueueProcessor.drain();
     }
   }
 

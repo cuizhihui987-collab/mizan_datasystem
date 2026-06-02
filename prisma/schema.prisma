@@ -44,10 +44,13 @@ model User {
   image         String?
   password      String?   // for Credentials provider
   role          String    @default("USER") // USER, ADMIN
+  bio           String?
 
   accounts Account[]
   sessions Session[]
   schemas  Schema[]
+  roles    UserRole[]
+  notifications Notification[]
   tablePermissions TablePermission[]
 }
 
@@ -57,6 +60,54 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// ─── RBAC: Roles & Permissions ─────────────────────────
+
+// UserRole: Many-to-many join between User and Role
+model UserRole {
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId    String
+  role      Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, roleId])
+}
+
+// Role: A named set of permissions
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+// Permission: Individual system-level permission
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  group       String   // grouping key: "user", "role", "permission", "system"
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+// RolePermission: Many-to-many join between Role and Permission
+model RolePermission {
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
 }
 
 // ─── Schema Management ──────────────────────────────────
@@ -93,6 +144,7 @@ model TableDefinition {
   headerRowNumber Int      @default(1) // Which row is the header
   status          String   @default("DRAFT") // DRAFT, CREATED, IMPORTED, MODIFIED
   sourceFile      String?
+  color           String?  // hex color for visual labeling, e.g. "#3B82F6"
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -172,7 +224,7 @@ model ForeignKeyDefinition {
   updatedAt         DateTime @updatedAt
 
   table           TableDefinition  @relation("FKSourceTable", fields: [tableId], references: [id], onDelete: Cascade)
-  referencedTable TableDefinition  @relation("FKTtargetTable", fields: [referencedTableId], references: [id])
+  referencedTable TableDefinition  @relation("FKTtargetTable", fields: [referencedTableId], references: [id], onDelete: Cascade)
   sourceColumns   ColumnDefinition[] @relation("FKColumns")
 }
 
@@ -260,7 +312,7 @@ model ImportJob {
   totalRows     Int?
   processedRows Int?
   errorRows     Int?
-  status        String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED
+  status        String    @default("PENDING") // PENDING, QUEUED, PROCESSING, COMPLETED, FAILED, CANCELLED
   errorLog      String?   // JSON array of errors
   startedAt     DateTime?
   completedAt   DateTime?
@@ -305,4 +357,38 @@ model ColumnPermission {
   canWrite  Boolean  @default(true)
 
   @@unique([tablePermissionId, columnId])
+}
+
+// ─── Notifications ───────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // file_shared, table_shared
+  title     String
+  message   String?
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── File Storage ─────────────────────────────────────
+
+// StoredFile: Tracks files in the storage system (local or cloud)
+model StoredFile {
+  id           String   @id @default(cuid())
+  originalName String
+  storageType  String   @default("local") // local, s3
+  storagePath  String                    // relative path or S3 key
+  fileSize     Int
+  mimeType     String?
+  bucket       String?                   // S3 bucket (null for local)
+  tags         String?                   // JSON array of tag strings
+  folder       String   @default("/")    // folder path, e.g. "/images/products"
+  sharedWith   String?                   // JSON array of user IDs
+  userId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth-options";
 import { prisma } from "@/lib/db/prisma";
 import { DataImporter } from "@/lib/import/data-importer";
+import { QueueProcessor } from "@/lib/import/queue-processor";
 
 export async function POST(
   req: Request,
@@ -38,7 +39,32 @@ export async function POST(
     );
   }
 
-  // Start async import (non-blocking - fire and forget)
+  const { searchParams } = new URL(req.url);
+  const syncMode = searchParams.get("sync") === "true";
+
+  const { queued, position } = await QueueProcessor.enqueue(importId);
+
+  if (queued) {
+    return NextResponse.json({ status: "queued", position });
+  }
+
+  if (syncMode) {
+    // Wait for the import to complete
+    try {
+      const importer = new DataImporter();
+      await importer.import(importId);
+
+      const job = await prisma.importJob.findUnique({
+        where: { id: importId },
+      });
+      return NextResponse.json(job);
+    } catch (error) {
+      console.error("Sync import error:", error);
+      return NextResponse.json({ error: "导入失败" }, { status: 500 });
+    }
+  }
+
+  // Async: fire-and-forget
   const importer = new DataImporter();
   importer.import(importId).catch((err) => {
     console.error("Import error:", err);

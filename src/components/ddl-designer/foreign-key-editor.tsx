@@ -1,8 +1,8 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useDDLDesignerStore } from "@/stores/ddl-designer-store";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -15,12 +15,34 @@ import { Trash2, Plus } from "lucide-react";
 const DELETE_ACTIONS = ["NO ACTION", "CASCADE", "SET NULL", "RESTRICT"];
 const UPDATE_ACTIONS = ["NO ACTION", "CASCADE", "SET NULL", "RESTRICT"];
 
-export function ForeignKeyEditor() {
+interface TableInfo {
+  id: string;
+  logicalName: string;
+  physicalName: string;
+  status: string;
+}
+
+export function ForeignKeyEditor({ schemaId }: { schemaId: string }) {
   const foreignKeys = useDDLDesignerStore((s) => s.foreignKeys);
   const columns = useDDLDesignerStore((s) => s.columns);
   const addForeignKey = useDDLDesignerStore((s) => s.addForeignKey);
   const updateForeignKey = useDDLDesignerStore((s) => s.updateForeignKey);
   const removeForeignKey = useDDLDesignerStore((s) => s.removeForeignKey);
+
+  const [tables, setTables] = useState<TableInfo[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/schemas/${schemaId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setTables((data.tables || []).filter((t: TableInfo) => t.status !== "DRAFT"));
+      })
+      .catch(() => {});
+  }, [schemaId]);
+
+  // Build a map of physicalName → logicalName for quick lookup
+  const tableMap = new Map<string, string>();
+  tables.forEach((t) => tableMap.set(t.physicalName, t.logicalName));
 
   return (
     <div className="space-y-3">
@@ -65,18 +87,36 @@ export function ForeignKeyEditor() {
               </Select>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">引用表（物理名）</label>
-              <Input
+              <label className="text-xs text-muted-foreground">引用表</label>
+              <Select
                 value={fk.referencedPhysicalName}
-                onChange={(e) =>
+                onValueChange={(v) => {
+                  const logical = tableMap.get(v) || v;
                   updateForeignKey(fk.id, {
-                    referencedTableName: e.target.value,
-                    referencedPhysicalName: e.target.value,
-                  })
-                }
-                placeholder="例如: mzan_tbl_xxx"
-                className="h-8 font-mono text-xs"
-              />
+                    referencedTableName: logical,
+                    referencedPhysicalName: v,
+                  });
+                }}
+              >
+                <SelectTrigger className="h-8">
+                  <SelectValue placeholder="选择表" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tables.map((t) => (
+                    <SelectItem key={t.physicalName} value={t.physicalName}>
+                      {t.logicalName}
+                      <span className="text-[10px] text-muted-foreground ml-2 font-mono">
+                        {t.physicalName}
+                      </span>
+                    </SelectItem>
+                  ))}
+                  {tables.length === 0 && (
+                    <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+                      当前模型没有已创建的表
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

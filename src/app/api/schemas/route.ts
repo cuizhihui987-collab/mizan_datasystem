@@ -17,10 +17,33 @@ export async function GET() {
   }
 
   const schemas = await prisma.schema.findMany({
-    where: (await isAdmin(session.user.id)) ? { status: "ACTIVE" } : { userId: session.user.id, status: "ACTIVE" },
+    where: (await isAdmin(session.user.id))
+      ? { status: "ACTIVE" }
+      : {
+          status: "ACTIVE",
+          OR: [
+            { userId: session.user.id },
+            { tables: { some: { tablePermissions: { some: { userId: session.user.id } } } } },
+          ],
+        },
     orderBy: { updatedAt: "desc" },
-    include: { _count: { select: { tables: true } } },
+    include: {
+      _count: { select: { tables: true } },
+      user: { select: { name: true, email: true } },
+    },
   });
+
+  // Fix table counts for non-owner users
+  if (!(await isAdmin(session.user.id))) {
+    for (const schema of schemas) {
+      if (schema.userId !== session.user.id) {
+        const count = await prisma.tablePermission.count({
+          where: { userId: session.user.id, table: { schemaId: schema.id } },
+        });
+        (schema as Record<string, unknown>)._count = { tables: count };
+      }
+    }
+  }
 
   return NextResponse.json(schemas);
 }

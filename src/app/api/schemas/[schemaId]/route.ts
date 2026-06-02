@@ -16,17 +16,36 @@ export async function GET(
   const { schemaId } = await params;
 
   const schema = await prisma.schema.findFirst({
-    where: (await isAdmin(session.user.id)) ? { id: schemaId } : { id: schemaId, userId: session.user.id },
+    where: (await isAdmin(session.user.id))
+      ? { id: schemaId }
+      : {
+          id: schemaId,
+          OR: [
+            { userId: session.user.id },
+            { tables: { some: { tablePermissions: { some: { userId: session.user.id } } } } },
+          ],
+        },
     include: {
       tables: {
         include: { _count: { select: { columns: true } } },
         orderBy: { createdAt: "desc" },
       },
+      user: { select: { name: true, email: true } },
     },
   });
 
   if (!schema) {
     return NextResponse.json({ error: "数据模型不存在" }, { status: 404 });
+  }
+
+  // Non-owner users: only see tables they have permission for
+  if (!(await isAdmin(session.user.id)) && schema.userId !== session.user.id) {
+    const permittedTableIds = await prisma.tablePermission.findMany({
+      where: { userId: session.user.id, table: { schemaId: schema.id } },
+      select: { tableId: true },
+    });
+    const permittedSet = new Set(permittedTableIds.map((p) => p.tableId));
+    schema.tables = schema.tables.filter((t) => permittedSet.has(t.id));
   }
 
   return NextResponse.json(schema);
