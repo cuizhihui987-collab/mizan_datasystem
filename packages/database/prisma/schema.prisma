@@ -1,0 +1,514 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── NextAuth Models ───────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @default("")
+  access_token      String? @default("")
+  expires_at        Int?
+  token_type        String? @default("")
+  scope             String? @default("")
+  id_token          String? @default("")
+  session_state     String? @default("")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // for Credentials provider
+  role          String    @default("USER") // USER, ADMIN
+  bio           String?
+
+  accounts Account[]
+  sessions Session[]
+  schemas  Schema[]
+  roles    UserRole[]
+  notifications Notification[]
+  tablePermissions TablePermission[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── RBAC: Roles & Permissions ─────────────────────────
+
+// UserRole: Many-to-many join between User and Role
+model UserRole {
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId    String
+  role      Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, roleId])
+}
+
+// Role: A named set of permissions
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+// Permission: Individual system-level permission
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  group       String   // grouping key: "user", "role", "permission", "system"
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+// RolePermission: Many-to-many join between Role and Permission
+model RolePermission {
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+// ─── Schema Management ──────────────────────────────────
+
+// Schema: A logical container/namespace for tables
+model Schema {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  status      String   @default("ACTIVE") // ACTIVE, ARCHIVED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id])
+  tables      TableDefinition[]
+  views       ViewDefinition[]
+  scripts     CustomScript[]
+  templates   ExportTemplate[]
+  importJobs  ImportJob[]
+  pipelines   PipelineDefinition[]
+  dashboards  Dashboard[]
+
+  @@unique([userId, name])
+}
+
+// ─── Table Definitions ──────────────────────────────────
+
+// TableDefinition: Metadata about a user-defined table
+model TableDefinition {
+  id              String   @id @default(cuid())
+  schemaId        String
+  logicalName     String   // Human-readable name (e.g., "商品库存")
+  physicalName    String   @unique // System-generated (mzan_tbl_<cuid>)
+  description     String?
+  headerRowNumber Int      @default(1) // Which row is the header
+  status          String   @default("DRAFT") // DRAFT, CREATED, IMPORTED, MODIFIED
+  sourceFile      String?
+  color           String?  // hex color for visual labeling, e.g. "#3B82F6"
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  schema                Schema              @relation(fields: [schemaId], references: [id])
+  columns               ColumnDefinition[]
+  indexes               IndexDefinition[]
+  sourceForeignKeys     ForeignKeyDefinition[] @relation("FKSourceTable")
+  targetForeignKeys     ForeignKeyDefinition[] @relation("FKTtargetTable")
+  triggers              TriggerDefinition[]
+  importJobs            ImportJob[]
+  tablePermissions      TablePermission[]
+  syncConnections       SyncConnection[]
+  pipelineSteps         PipelineStep[]
+  dashboardWidgets      DashboardWidget[]
+
+  @@unique([schemaId, logicalName])
+}
+
+// ─── Column Definitions ─────────────────────────────────
+
+// ColumnDefinition: Metadata about a single column in a user-defined table
+model ColumnDefinition {
+  id              String   @id @default(cuid())
+  tableId         String
+  logicalName     String   // Human-readable column name
+  physicalName    String   // Safe DB column name (e.g., "product_name")
+  dataType        String   // STRING, INTEGER, FLOAT, BOOLEAN, DATE, DATETIME, TEXT
+  dataTypeArgs    String?  // JSON: {"length":255} or {"values":["A","B"]}
+  isNullable      Boolean  @default(true)
+  isPrimaryKey    Boolean  @default(false)
+  isUnique        Boolean  @default(false)
+  defaultValue    String?
+  autoIncrement   Boolean  @default(false)
+  ordinalPosition Int      @default(0)
+  description     String?
+  checkExpression String?  // CHECK constraint (e.g., "price > 0")
+
+  // FK relationship
+  foreignKeyId    String?
+  foreignKey      ForeignKeyDefinition? @relation("FKColumns", fields: [foreignKeyId], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  table TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  columnPermissions ColumnPermission[]
+
+  @@unique([tableId, physicalName])
+}
+
+// ─── Index Definitions ──────────────────────────────────
+
+// IndexDefinition: Metadata about an index on a user-defined table
+model IndexDefinition {
+  id          String   @id @default(cuid())
+  tableId     String
+  indexName   String
+  columnIds   String   // JSON array of ColumnDefinition IDs
+  isUnique    Boolean  @default(false)
+  indexMethod String   @default("BTREE") // on SQLite: just BTREE
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  table TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+}
+
+// ─── Foreign Key Definitions ────────────────────────────
+
+// ForeignKeyDefinition: Metadata about a FK constraint
+model ForeignKeyDefinition {
+  id                String   @id @default(cuid())
+  tableId           String
+  constraintName    String
+  sourceColumnIds   String   // JSON array of ColumnDefinition IDs
+  referencedTableId String
+  refColumnIds      String   // JSON array of ColumnDefinition IDs
+  onDelete          String   @default("NO ACTION") // CASCADE, SET NULL, NO ACTION, RESTRICT
+  onUpdate          String   @default("NO ACTION")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  table           TableDefinition  @relation("FKSourceTable", fields: [tableId], references: [id], onDelete: Cascade)
+  referencedTable TableDefinition  @relation("FKTtargetTable", fields: [referencedTableId], references: [id], onDelete: Cascade)
+  sourceColumns   ColumnDefinition[] @relation("FKColumns")
+}
+
+// ─── Trigger Definitions ────────────────────────────────
+
+// TriggerDefinition: Metadata about a trigger on a user-defined table
+model TriggerDefinition {
+  id          String   @id @default(cuid())
+  tableId     String
+  triggerName String
+  timing      String   // BEFORE, AFTER, INSTEAD OF
+  event       String   // INSERT, UPDATE, DELETE
+  forEach     String   @default("ROW") // ROW, STATEMENT (SQLite only ROW)
+  logic       String   // The SQL logic
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  table TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+}
+
+// ─── View Definitions ──────────────────────────────────
+
+// ViewDefinition: A saved SQL view (virtual table based on a query)
+model ViewDefinition {
+  id          String   @id @default(cuid())
+  schemaId    String
+  viewName    String
+  sql         String   // The SELECT query that defines the view
+  description String?
+  status      String   @default("DRAFT") // DRAFT, CREATED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schema Schema @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+
+  @@unique([schemaId, viewName])
+}
+
+// ─── Custom Scripts ───────────────────────────────────
+
+// CustomScript: Saved SQL scripts (like stored procedures for SQLite)
+model CustomScript {
+  id          String   @id @default(cuid())
+  schemaId    String
+  scriptName  String
+  sql         String   // The SQL to execute
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schema Schema @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+
+  @@unique([schemaId, scriptName])
+}
+
+// ─── Export Templates ──────────────────────────────────
+
+// ExportTemplate: Saved export configuration for data export
+model ExportTemplate {
+  id          String   @id @default(cuid())
+  schemaId    String
+  templateName String
+  config      String   // JSON: { format, filePattern, columns[], filters, sort }
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schema Schema @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+
+  @@unique([schemaId, templateName])
+}
+
+// ─── Import Jobs ────────────────────────────────────────
+
+// ImportJob: Tracks the state of a spreadsheet import
+model ImportJob {
+  id            String    @id @default(cuid())
+  tableId       String?
+  schemaId      String
+  fileName      String
+  filePath      String
+  fileSize      Int
+  headerRow     Int       @default(1)
+  totalRows     Int?
+  processedRows Int?
+  errorRows     Int?
+  status        String    @default("PENDING") // PENDING, QUEUED, PROCESSING, COMPLETED, FAILED, CANCELLED
+  errorLog      String?   // JSON array of errors
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  table  TableDefinition? @relation(fields: [tableId], references: [id])
+  schema Schema          @relation(fields: [schemaId], references: [id])
+}
+
+// ─── Permissions ──────────────────────────────────────
+
+// TablePermission: Grants a user access to a table with specific action flags
+model TablePermission {
+  id        String   @id @default(cuid())
+  tableId   String
+  table     TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  canSelect Boolean  @default(true)
+  canInsert Boolean  @default(true)
+  canUpdate Boolean  @default(true)
+  canDelete Boolean  @default(false)
+
+  columnPermissions ColumnPermission[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tableId, userId])
+}
+
+// ColumnPermission: Restricts read/write access to specific columns within a table permission
+model ColumnPermission {
+  id                String   @id @default(cuid())
+  tablePermissionId String
+  tablePermission   TablePermission @relation(fields: [tablePermissionId], references: [id], onDelete: Cascade)
+  columnId          String
+  column            ColumnDefinition @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  canRead   Boolean  @default(true)
+  canWrite  Boolean  @default(true)
+
+  @@unique([tablePermissionId, columnId])
+}
+
+// ─── Data Sync ──────────────────────────────────────
+
+model SyncConnection {
+  id           String   @id @default(cuid())
+  name         String
+  endpoint     String
+  method       String   @default("GET") // GET, POST
+  headers      String?  // JSON: { "Authorization": "..." }
+  authType     String   @default("none") // none, basic, token
+  authConfig   String?  // JSON: { username, password } or { token }
+  direction    String   @default("pull") // pull, push, bidirectional
+  syncInterval Int      @default(0) // minutes, 0 = manual
+  tableId      String
+  keyField     String?  // for upsert matching
+  fieldMapping String?  // JSON: [{ externalField, localColumn }]
+  enabled      Boolean  @default(true)
+  lastSyncAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  table TableDefinition @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  jobs  SyncJob[]
+}
+
+model SyncJob {
+  id           String    @id @default(cuid())
+  connectionId String
+  direction    String    // pull, push
+  status       String    @default("pending") // pending, processing, completed, failed
+  totalRows    Int       @default(0)
+  successRows  Int       @default(0)
+  errorRows    Int       @default(0)
+  errorLog     String?   // JSON array
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  connection SyncConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+
+// ─── Pipeline (ETL Workflow) ──────────────────────────
+
+// PipelineDefinition: A named ETL pipeline/workflow under a schema
+model PipelineDefinition {
+  id          String   @id @default(cuid())
+  schemaId    String
+  name        String
+  description String?
+  status      String   @default("DRAFT") // DRAFT, ACTIVE, RUNNING, COMPLETED, FAILED, ARCHIVED
+  edges       String   @default("[]") // JSON: array of edge connections { source, target, sourceHandle, targetHandle, animated, metadata }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schema Schema         @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+  steps  PipelineStep[]
+
+  @@unique([schemaId, name])
+}
+
+// PipelineStep: An ordered step within a pipeline, each producing an intermediate table
+model PipelineStep {
+  id                 String   @id @default(cuid())
+  pipelineId         String
+  stepOrder          Int      @default(0)
+  stepType           String   // source_import, source_table, source_api, transform_sql, transform_merge, transform_filter, output_table
+  label              String?
+  config             String   @default("{}") // JSON: type-specific configuration
+  sourceTableId      String?
+  outputPhysicalName String   // mzan_pipe_<cuid>
+  status             String   @default("PENDING") // PENDING, RUNNING, COMPLETED, FAILED
+  errorLog           String?  // JSON array of errors
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  pipeline    PipelineDefinition @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  sourceTable TableDefinition?   @relation(fields: [sourceTableId], references: [id])
+
+  @@unique([pipelineId, stepOrder])
+}
+
+// ─── Dashboard ───────────────────────────────────────
+
+// Dashboard: A named dashboard/kanban board under a schema
+model Dashboard {
+  id        String   @id @default(cuid())
+  schemaId  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  schema  Schema             @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+  widgets DashboardWidget[]
+}
+
+// DashboardWidget: A single chart widget on a dashboard
+model DashboardWidget {
+  id          String   @id @default(cuid())
+  dashboardId String
+  title       String?
+  tableId     String?
+  chartType   String   @default("bar")
+  config      String   @default("{}") // JSON: { xAxis, yAxis[], aggregation, stacked, sortBy, ... }
+  positionX   Int      @default(0)
+  positionY   Int      @default(1)
+  width       Int      @default(6)
+  height      Int      @default(4)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dashboard Dashboard    @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  table     TableDefinition? @relation(fields: [tableId], references: [id])
+}
+
+// ─── Notifications ───────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // file_shared, table_shared
+  title     String
+  message   String?
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── File Storage ─────────────────────────────────────
+
+// StoredFile: Tracks files in the storage system (local or cloud)
+model StoredFile {
+  id           String   @id @default(cuid())
+  originalName String
+  storageType  String   @default("local") // local, s3
+  storagePath  String                    // relative path or S3 key
+  fileSize     Int
+  mimeType     String?
+  bucket       String?                   // S3 bucket (null for local)
+  tags         String?                   // JSON array of tag strings
+  folder       String   @default("/")    // folder path, e.g. "/images/products"
+  sharedWith   String?                   // JSON array of user IDs
+  userId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

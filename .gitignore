@@ -1,8 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
-/.pnp
+# dependencies (nested as well)
+node_modules/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -14,8 +14,8 @@
 # testing
 /coverage
 
-# next.js
-/.next/
+# next.js (nested as well)
+.next/
 /out/
 
 # production
@@ -41,10 +41,20 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# prisma
+# prisma (monorepo)
 prisma/dev.db
 prisma/dev.db-journal
+packages/database/prisma/dev.db
+packages/database/prisma/dev.db-journal
 
 # uploads
 public/uploads/*
 !public/uploads/.gitkeep
+apps/*/public/uploads/*
+!apps/*/public/uploads/.gitkeep
+
+# turbo
+.turbo
+
+# claude
+.claude/

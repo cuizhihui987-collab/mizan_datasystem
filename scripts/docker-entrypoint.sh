@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-DB_DIR="/app/prisma"
+DB_DIR="/app/packages/database/prisma"
 DB_FILE="${DB_DIR}/prod.db"
 SEED_DB="/app/seed.db"
 
@@ -13,14 +13,8 @@ if [ ! -f "$DB_FILE" ]; then
     echo ">>> 开发数据库已复制到生产环境"
   else
     echo ">>> 未找到 seed 数据库，将创建全新的数据库"
-    echo ">>> 创建空数据库 ..."
-    cd /app && npx prisma db push --skip-generate --accept-data-loss
+    cd /app/packages/database && npx prisma db push --skip-generate --accept-data-loss
   fi
-
-  # ── Ensure dashboard tables exist ──
-  echo ">>> 创建 Dashboard 相关表 ..."
-  sqlite3 "$DB_FILE" < /app/scripts/create-dashboard-tables.sql
-  echo ">>> Dashboard 表已就绪"
 else
   echo ">>> 数据库已存在，跳过初始化"
 fi

@@ -1,0 +1,23 @@
+{
+  "name": "@mizan/shared-lib",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./utils": "./src/utils/cn.ts",
+    "./auth/permissions": "./src/auth/permissions.ts",
+    "./auth/nextauth": "./src/auth/nextauth.ts"
+  },
+  "dependencies": {
+    "clsx": "*",
+    "tailwind-merge": "*",
+    "@mizan/database": "workspace:*"
+  },
+  "peerDependencies": {
+    "next": "^15.2.0",
+    "next-auth": "^4.24.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

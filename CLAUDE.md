@@ -14,35 +14,54 @@ Mizan 数据管理系统 — a Next.js application for importing Excel/CSV sprea
 - **UI**: shadcn/ui (Radix primitives + Tailwind CSS)
 - **State**: Zustand (DDL Designer), TanStack React Query (server state)
 - **Charts**: Recharts
-- **Spreadsheet**: xlsx (SheetJS)
+- **Spreadsheet**: Handsontable (inline editing), xlsx / exceljs (parsing)
 - **Validation**: Zod (form/API validation), react-hook-form
-- **DnD**: @dnd-kit (column reordering)
+- **DnD**: @dnd-kit (column reordering), @xyflow/react (ETL pipeline canvas)
+- **Monorepo**: pnpm workspaces + Turborepo
 
 ## Commands
 
 ```bash
-npm run dev          # Start dev server (http://localhost:3000)
-npm run build        # Production build
-npm run start        # Start production server
-npm run lint         # ESLint check
-npm run db:generate  # Regenerate Prisma client
-npm run db:migrate   # Run Prisma migrations
-npm run db:push      # Push schema changes to DB (dev)
-npm run db:studio    # Open Prisma Studio GUI
+pnpm dev             # Start dev server (http://localhost:3000)
+pnpm build           # Production build (via Turbo)
+pnpm start           # Start production server
+pnpm lint            # ESLint check (via Turbo)
+pnpm db:generate     # Regenerate Prisma client (in packages/database)
+pnpm db:migrate      # Run Prisma migrations (in packages/database)
+pnpm db:push         # Push schema changes to DB (in packages/database)
+pnpm db:studio       # Open Prisma Studio GUI
 ```
+
+Prisma commands run inside `packages/database/` — scripts automatically `cd` there. The root `.env` is for dev convenience; additional config may be in `packages/database/.env`.
 
 ## Project Architecture
 
+### Monorepo Structure (pnpm workspace + Turbo)
+
+```
+apps/                   # Sub-applications (separate Next.js apps)
+├── admin/              # Admin panel
+├── core/               # Core application
+├── data/               # Data browser
+└── pipelines/          # ETL pipelines
+packages/               # Shared workspace packages
+├── database/           # Prisma schema + client (@mizan/database)
+├── shared-lib/         # Utilities, auth helpers (@mizan/shared-lib)
+└── shared-ui/          # Reusable shadcn UI components (@mizan/shared-ui)
+src/                    # Main Next.js application (App Router)
+```
+
 ### Data Flow
 
-1. **Upload** → User uploads .xlsx/.xls/.csv → saved to `public/uploads/` → `ImportJob` record created
-2. **Parse** → Server reads file via `xlsx` library, detects column names/types from header row
+1. **Upload** → User uploads .xlsx/.xls/.csv → saved to storage (local or S3) → `StoredFile` + `ImportJob` records created
+2. **Parse** → Server reads file via `xlsx`/`exceljs`, detects column names/types from header row
 3. **Design** → User defines columns, PKs, FKs, indexes, triggers in DDL Designer (UI state in Zustand store)
-4. **Execute** → `DDLGenerator` produces SQLite CREATE TABLE DDL → executed against the SQLite DB → `TableDefinition` status becomes "CREATED"
-5. **CRUD** → `DynamicQueryBuilder` generates parameterized SELECT/INSERT queries for runtime data access
-6. **Visualize** → Recharts renders configurable bar/line/area/pie charts from queried data
+4. **Execute** → `DDLGenerator` produces SQLite CREATE TABLE DDL → executed via `$executeRawUnsafe` → `TableDefinition` status becomes `CREATED`
+5. **CRUD** → `DynamicQueryBuilder` generates parameterized SELECT/INSERT queries for runtime data access; Handsontable for inline editing
+6. **Visualize** → Recharts renders configurable bar/line/area/pie/scatter/combo/radar/heatmap charts
+7. **ETL** → Visual pipeline editor (React Flow) builds DAG workflows with 7 step types, executed via topological sort
 
-### Directory Structure
+### src/ Directory Structure
 
 ```
 src/
@@ -89,20 +108,31 @@ src/
 ├── hooks/
 │   ├── use-import-status.ts  # Poll import job progress
 │   └── use-table-data.ts     # Paginated table data with sorting/search
+├── middleware.ts             # NextAuth route protection
 └── types/
     └── next-auth.d.ts        # Session type augmentation
 ```
 
-### Prisma Schema (Key Models)
+### Prisma Schema (Key Models — defined in packages/database/prisma/)
 
-- **User** — auth users, linked to schemas
-- **Schema** — logical namespace/container for tables (user-scoped)
-- **TableDefinition** — metadata table tracking logical name, physical DB name, status (DRAFT → CREATED → IMPORTED/MODIFIED)
-- **ColumnDefinition** — column metadata: data type, PK/nullable/unique, FK refs, defaults, CHECK expressions
-- **IndexDefinition** — indexes with column selection
-- **ForeignKeyDefinition** — FK constraints with source/target columns, ON DELETE/UPDATE actions
-- **TriggerDefinition** — SQL triggers with timing (BEFORE/AFTER), event (INSERT/UPDATE/DELETE)
-- **ImportJob** — tracks file import lifecycle: PENDING → PROCESSING → COMPLETED/FAILED
+- **User** / **Account** / **Session** / **VerificationToken** — NextAuth models; User has role field (USER|ADMIN)
+- **Schema** — logical namespace/container for tables (user-scoped, `@@unique([userId, name])`)
+- **TableDefinition** — metadata: logical name, physical DB name (`mzan_tbl_<cuid>`), status (DRAFT → CREATED → IMPORTED/MODIFIED), optional color labeling
+- **ColumnDefinition** — column metadata: 7 base types (STRING, INTEGER, FLOAT, BOOLEAN, DATE, DATETIME, TEXT) + dataTypeArgs for ENUM/length, PK/nullable/unique/autoIncrement, FK refs, defaults, CHECK expressions
+- **IndexDefinition** — indexes with JSON array of columnIds, unique flag
+- **ForeignKeyDefinition** — FK constraints with JSON source/ref column IDs, ON DELETE/UPDATE actions
+- **TriggerDefinition** — SQL triggers with timing (BEFORE/AFTER/INSTEAD OF), event (INSERT/UPDATE/DELETE)
+- **ViewDefinition** — saved SQL views (DRAFT → CREATED status)
+- **CustomScript** — saved SQL scripts for ad-hoc execution
+- **ExportTemplate** — saved export configs (format, columns, filters, sort)
+- **ImportJob** — tracks file import lifecycle: PENDING → QUEUED → PROCESSING → COMPLETED/FAILED/CANCELLED; 500-row batch processing
+- **TablePermission** / **ColumnPermission** — table-level (SELECT/INSERT/UPDATE/DELETE) and column-level (READ/WRITE) access control
+- **Role** / **UserRole** / **Permission** / **RolePermission** — RBAC system with named roles, system-level permission codes grouped by category
+- **PipelineDefinition** / **PipelineStep** — ETL workflows (DAG via React Flow), steps produce intermediate tables (`mzan_pipe_<cuid>`)
+- **Dashboard** / **DashboardWidget** — dashboards with configurable chart widgets (recharts); widget config includes xAxis, yAxis, aggregation, grid position
+- **SyncConnection** / **SyncJob** — data sync with external APIs (pull/push/bidirectional), field mapping, scheduling
+- **StoredFile** — file storage tracking (local or S3), with folder, tags, sharing
+- **Notification** — user notifications for file/table sharing events
 
 ### Auth
 
@@ -112,11 +142,21 @@ src/
 - bcryptjs for password hashing
 - Session user ID is embedded via JWT callback and accessible as `session.user.id`
 
+### Workspace Packages
+
+| Package | Path | Exports | Purpose |
+|---------|------|---------|---------|
+| `@mizan/database` | `packages/database/` | PrismaClient singleton | DB client init |
+| `@mizan/shared-lib` | `packages/shared-lib/` | `utils/cn`, `auth/permissions` | Utilities, permission helpers |
+| `@mizan/shared-ui` | `packages/shared-ui/` | 16 shadcn components (button, dialog, input, select, etc.) | Reusable UI primitives |
+
 ### Key Design Decisions
 
 - **File uploads** use `busboy` (not `req.formData()`) for multipart parsing due to Node.js v24 compatibility
-- **Physical tables** are created dynamically via raw SQL (executed through Prisma's `$executeRawUnsafe`), not managed by Prisma migrations — the Prisma schema only stores metadata
-- **Physical table naming**: `mzan_tbl_` + 10 random alphanumeric chars
-- **Import process** is async: file is saved immediately, then `/api/imports/[importId]/process` triggers batch processing in the background
-- **DDL execution** is idempotent: drops the existing physical table if re-executing before creating
-- **SQLite** is used as the runtime database for dynamically created tables (same as the metadata DB)
+- **Physical tables** are created dynamically via raw SQL (`$executeRawUnsafe`), not managed by Prisma migrations — the Prisma schema only stores metadata
+- **Physical table naming**: `mzan_tbl_` + cuid (10-char); pipeline intermediate tables: `mzan_pipe_` + cuid
+- **System columns**: `_id` (autoIncrement PK), `_created_at`, `_updated_at` added to every physical table
+- **DDL execution** is idempotent: ALTER TABLE ADD COLUMN if table exists, CREATE TABLE if not
+- **Import process** is async: file saved immediately, then `/api/imports/[importId]/process` triggers batch processing (500 rows/batch) with concurrent job control
+- **SQLite** used as the runtime database for dynamically created tables (same as the metadata DB)
+- **Storage**: supports both local filesystem and S3-compatible object storage (configured via `STORAGE_TYPE`)

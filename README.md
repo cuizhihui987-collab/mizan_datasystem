@@ -1,113 +1,6 @@
 # Mizan 数据管理系统
 
-一套基于 Next.js 技术栈的可视化数据管理平台，支持从电子表格导入、数据库表结构设计、DDL 执行到数据浏览与图表分析的全流程操作。
-
----
-
-## 实现功能
-
-### 1. 电子表格导入
-
-- 支持 **.xlsx、.xls、.csv** 格式文件上传（最大 50MB）
-- 拖拽或点击选择文件，上传即创建导入任务
-- 异步后台导入，导入过程不阻塞程序正常使用
-- 导入进度实时跟踪（PENDING → PROCESSING → COMPLETED/FAILED）
-- 导入完成/失败时弹出 toast 通知
-- 导入历史记录查询
-
-### 2. 智能表头解析
-
-- 上传后可指定表头所在行号（支持非首行表头）
-- 自动检测各列数据类型（INTEGER、FLOAT、BOOLEAN、DATE、DATETIME、STRING）
-- 预览解析结果：列名、类型、示例数据行
-- **字段映射**：解析后可自定义字段名称、数据类型、主键、非空约束
-
-### 3. 可视化 DDL 设计器
-
-- **列编辑**：添加、删除、拖拽排序列；配置列名、物理名、数据类型、长度、默认值
-- 支持 11 种数据类型：STRING、TEXT、INTEGER、FLOAT、BOOLEAN、DATE、DATETIME、DECIMAL、BINARY、JSON、UUID
-- **主键**：支持单列/复合主键
-- **非空约束**、**唯一约束**、**自增** 开关
-- **CHECK 约束**：自定义校验表达式（如 `price > 0`）
-- **外键管理**：选择源列、引用表、引用列，配置 ON DELETE / ON UPDATE 策略（NO ACTION、CASCADE、SET NULL、RESTRICT）
-- **索引管理**：多列索引、唯一索引
-- **触发器管理**：BEFORE/AFTER/INSTEAD OF 触发器，支持 INSERT/UPDATE/DELETE 事件
-- **SQL 预览**：实时生成 CREATE TABLE DDL 语句，支持一键复制
-
-### 4. DDL 执行
-
-- 提交 DDL 至后台执行，自动在 SQLite 中创建物理表
-- 自动添加系统字段（`_id` 自增主键、`_created_at`、`_updated_at`）
-- 执行安全校验：禁止 DROP DATABASE、CREATE USER、GRANT 等危险操作
-- 重新执行时自动删除旧表重建（幂等操作）
-- 执行成功后表状态更新为"已创建"
-
-### 5. 数据浏览
-
-- 动态数据表格：自动读取物理表元数据生成列头
-- 客户端分页、按列排序（升序/降序）
-- 按列搜索过滤（LIKE 查询）
-- **高级筛选**：可视化筛选器，支持 11 种操作符（等于、包含、大于、为空等），AND/OR 逻辑组合，活跃筛选标签展示
-- **单行数据插入**：对话框表单，支持所有数据类型
-- **双击单元格编辑**：内联输入框，Enter 保存，Esc 取消
-- **行级删除**：每行删除按钮 + 确认对话框
-- **批量选择**：复选框选择行 + 表头全选，选中后底部固定操作栏
-- **批量删除**：选中多行后批量删除
-- **批量更新**：选中多行后统一更新指定字段的值
-- **批量导入**：按货号匹配的批量导入，支持 CSV、Excel、JSON（字段名和逻辑名双重匹配）
-- **数据导出**：支持导出为 Excel (.xlsx) 和 CSV (.csv)，带 BOM 中文支持
-- **后台导入**：导入在后台执行，不影响其他操作
-
-### 6. 数据可视化
-
-- 支持 **8 种图表类型**：柱状图、折线图、面积图、饼图、散点图、组合图（柱+线双轴）、雷达图、热力图（SVG 色阶）
-- 散点图支持按分类字段着色分组
-- 组合图支持左右独立 Y 轴
-- 雷达图自动使用所有数值字段
-- 热力图基于 SVG 渲染，带色阶图例
-- 自动识别文本列（X 轴）和数值列（Y 轴）
-- 数据量自适应：散点/热力图取 500 行，其他图表取 50 行
-
-### 7. 视图管理
-
-- **创建视图**：保存 SELECT 查询为视图
-- **执行视图**：自动执行 `CREATE VIEW` 到 SQLite
-- **预览 SQL**：实时测试查询结果
-- **编辑/删除**：支持修改视图定义和删除（含 DROP VIEW）
-
-### 8. 自定义脚本
-
-- **创建脚本**：保存 SQL 脚本（INSERT/UPDATE/DELETE/SELECT）
-- **执行脚本**：按需执行，自动识别查询/变更类型
-- **结果查看**：显示影响行数和返回数据集（限 100 行）
-- **安全校验**：自动拦截 DROP DATABASE、CREATE USER 等危险操作
-
-### 9. Schema 管理
-
-- 多 Schema（数据模型）支持，每个 Schema 包含多张数据表
-- Schema 级操作：创建、编辑、删除（含级联删除关联数据）
-- 仪表盘概览：Schema 数量、数据表数量、导入任务统计
-
-### 10. 权限管理
-
-- **表级权限**：SELECT（查询）、INSERT（新增）、UPDATE（更新）、DELETE（删除）四种操作独立控制
-- **列级权限**：在表权限内进一步限制 READ（读取）、WRITE（写入）权限
-- **Schema Owner** 自动拥有全部权限，无需额外配置
-- **其他用户**：Owner 可通过"权限管理"对话框为其他用户分配表/列权限
-- **超级管理员**：`role: ADMIN` 的用户可访问和操作所有数据，管理所有权限
-
-### 11. 自动 API 文档
-
-- 基于数据表结构自动生成 RESTful API 文档
-- 包含所有 CRUD 端点的路径、参数、请求体示例和 cURL 示例
-- 在 Schema 详情页"API 文档"标签页查看
-
-### 12. 用户认证
-
-- 邮箱/密码注册与登录
-- 基于 NextAuth.js + JWT 的凭证认证
-- 路由保护：未登录自动跳转登录页
-- **超级管理员**：`role: ADMIN` 可访问所有 Schema 和数据，管理全部权限
+基于 Next.js 15 的全栈可视化数据管理平台，采用 pnpm monorepo + Turborepo 架构，支持多应用独立开发与部署。
 
 ---
 
@@ -115,389 +8,375 @@
 
 ### 技术栈
 
-| 类别 | 技术 | 说明 |
+| 类别 | 技术 | 用途 |
 |------|------|------|
-| 框架 | Next.js 15 (App Router) | 全栈 React 框架，服务端渲染 + API 路由 |
-| 运行时 | Node.js 24 | Serverless/Node 运行时 |
-| 数据库 ORM | Prisma 6 + SQLite | 元数据存储与数据库迁移 |
-| 认证 | NextAuth.js v4 + JWT | Credentials 凭证认证 |
-| UI 组件 | shadcn/ui (Radix UI + Tailwind CSS) | 可访问性优先的组件库 |
-| 样式 | Tailwind CSS 3 | 原子化 CSS |
-| 状态管理 | Zustand | DDL 设计器表单状态 + 后台导入任务状态 |
-| 服务端状态 | TanStack React Query | API 数据请求与缓存 |
-| 表单 | react-hook-form + Zod | 表单验证与类型安全 |
+| 框架 | Next.js 15 (App Router) | 全栈 React 框架，SSR + API 路由 |
+| 数据库 | SQLite + Prisma 6 | 元数据存储与动态物理表 |
+| 认证 | NextAuth.js v4 + JWT | 凭证登录与会话管理 |
+| UI | shadcn/ui (Radix + Tailwind) | 组件库与样式 |
+| 状态管理 | Zustand + TanStack React Query | 客户端/服务端状态分离 |
 | 图表 | Recharts | 数据可视化 |
-| 电子表格 | xlsx (SheetJS) | Excel/CSV/JSON 解析 |
-| 拖拽 | @dnd-kit | 列排序 |
-| 文件上传 | busboy | 流式 multipart/form-data 解析 |
-| 通知 | sonner | Toast 通知 |
+| 电子表格 | Handsontable + xlsx (SheetJS) | 在线表格编辑与解析 |
+| 存储 | 本地文件系统 / S3 兼容 | 文件上传存储 |
+| 工作流 | @xyflow/react (React Flow) | ETL 可视化画布 |
 
-### 核心数据流
+### 系统架构图
 
+```mermaid
+graph TB
+    subgraph Client["客户端层"]
+        Browser[浏览器]
+    end
+
+    subgraph Gateway["网关层"]
+        Nginx["Nginx 反向代理<br/>mizan.com"]
+    end
+
+    subgraph Apps["应用层 (Next.js 15)"]
+        Core["Core App<br/>:3000<br/>Schema/表/数据/图表"]
+        Data["Data App<br/>:3001<br/>文件管理/数据收集"]
+        Pipelines["Pipelines App<br/>:3002<br/>ETL 工作流"]
+        Admin["Admin App<br/>:3003<br/>用户/角色/权限"]
+    end
+
+    subgraph Packages["共享包层"]
+        SharedUI["@mizan/shared-ui<br/>shadcn 组件"]
+        SharedLib["@mizan/shared-lib<br/>工具/认证/权限"]
+        Database["@mizan/database<br/>Prisma Client"]
+    end
+
+    subgraph Storage["存储层"]
+        SQLite[("SQLite<br/>元数据 + 物理表")]
+        FileSystem[("文件系统 / S3<br/>上传文件")]
+    end
+
+    Browser --> Nginx
+    Nginx --> Core
+    Nginx --> Data
+    Nginx --> Pipelines
+    Nginx --> Admin
+
+    Core --> SharedUI
+    Core --> SharedLib
+    Core --> Database
+    Data --> SharedUI
+    Data --> SharedLib
+    Data --> Database
+    Pipelines --> SharedUI
+    Pipelines --> SharedLib
+    Pipelines --> Database
+    Admin --> SharedUI
+    Admin --> SharedLib
+    Admin --> Database
+
+    Database --> SQLite
+    Data --> FileSystem
 ```
-用户上传 Excel/CSV/JSON
-       │
-       ▼
-  ┌─────────────┐      ┌─────────────────┐
-  │  文件上传     │ ──→ │  ImportJob      │
-  │  (Busboy)    │      │  (PENDING)      │
-  └─────────────┘      └────────┬────────┘
-                                │
-                                ▼
-  ┌─────────────┐      ┌─────────────────┐
-  │  解析表头     │ ←── │  ImportJob      │
-  │  (xlsx)      │      │  (PROCESSING)   │
-  └──────┬──────┘      └─────────────────┘
-         │
-         ▼
-  ┌─────────────┐
-  │  字段映射     │ ← 可编辑字段名、类型、主键
-  └──────┬──────┘
-         │
-         ▼
-  ┌─────────────┐      ┌─────────────────┐
-  │  DDL 设计器   │      │  列/索引/FK/触发 │
-  │  (Zustand)   │      │  实时 SQL 预览   │
-  └──────┬──────┘      └────────┬────────┘
-         │                      │
-         ▼                      ▼
-  ┌─────────────┐      ┌─────────────────┐
-  │  执行 DDL    │ ──→ │  创建物理表      │
-  │  (安全校验)   │      │  (SQLite)       │
-  └──────┬──────┘      └─────────────────┘
-         │
-         ├─────────────┬──────────────┬──────────────┬──────────────┐
-         ▼             ▼              ▼              ▼              ▼
-  ┌─────────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
-  │  数据浏览     │ │ 高级筛选 │ │ 图表可视化 │ │ 批量导入  │ │ 视图/脚本    │
-  │ (编辑/删除)  │ │ 11种操作 │ │ 8种图表   │ │ 按货号   │ │ 创建/执行    │
-  └─────────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────────┘
+
+### 数据流
+
+```mermaid
+flowchart LR
+    Upload[上传文件<br/>Busboy/S3] --> Parse[解析<br/>xlsx/exceljs]
+    Parse --> DDL[DDL 设计器<br/>Zustand 状态]
+    DDL --> Execute[DDL 执行<br/>$executeRawUnsafe]
+    Execute --> SQLite[(SQLite<br/>物理表)]
+    SQLite --> Browse[数据浏览<br/>DynamicQueryBuilder]
+    Browse --> Chart[图表可视化<br/>Recharts]
+    Browse --> Export[数据导出<br/>exceljs/xlsx]
+    Import[数据收集<br/>Handsontable] --> DDL
+    ETL[ETL 工作流<br/>React Flow] --> SQLite
 ```
 
-### 数据库架构
+### 认证流程
 
-**元数据层**（Prisma 管理的 SQLite）：
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant B as 浏览器
+    participant N as Next.js
+    participant P as Prisma
+    participant DB as SQLite
 
-- `User` — 系统用户
-- `Schema` — 数据模型/命名空间
-- `TableDefinition` — 数据表元数据（逻辑名、物理名、状态）
-- `ColumnDefinition` — 列定义（类型、约束、默认值）
-- `IndexDefinition` — 索引定义
-- `ForeignKeyDefinition` — 外键约束
-- `TriggerDefinition` — 触发器定义
-- `ViewDefinition` — 视图定义（SQL 查询、状态）
-- `CustomScript` — 自定义脚本（SQL 脚本、描述）
-- `ImportJob` — 导入任务记录
-- `TablePermission` — 表级权限（用户-表：SELECT/INSERT/UPDATE/DELETE）
-- `ColumnPermission` — 列级权限（表权限内的列级 READ/WRITE 控制）
+    U->>B: 输入邮箱密码
+    B->>N: POST /api/auth/callback/credentials
+    N->>P: prisma.user.findUnique(email)
+    P->>DB: SELECT
+    DB-->>P: user data
+    P-->>N: user object
+    N->>N: bcrypt.compare(password, hash)
+    N->>N: JWT sign { id, role }
+    N-->>B: Set-Cookie: session-token
+    B-->>U: 登录成功 → 跳转首页
+```
 
-**数据层**（运行时动态创建的物理表）：
+### Monorepo 结构
 
-- 表名格式：`mzan_tbl_xxxxxxxxxx`
-- 自动包含系统字段：`_id`、`_created_at`、`_updated_at`
-- 由 `DDLGenerator` 生成 CREATE TABLE 语句，通过 `$executeRawUnsafe` 执行
+```mermaid
+graph TD
+    Root["mizan-datasystem/"] --> Apps["apps/"]
+    Root --> Packages["packages/"]
+    Root --> Configs["pnpm-workspace.yaml / turbo.json"]
+
+    Apps --> Core["core/ - 主应用"]
+    Apps --> Data["data/ - 数据管理"]
+    Apps --> Pipelines["pipelines/ - ETL"]
+    Apps --> Admin["admin/ - 管理后台"]
+
+    Packages --> DB["database/@mizan/database<br/>Prisma Schema + Client"]
+    Packages --> Lib["shared-lib/@mizan/shared-lib<br/>cn() / auth / permissions"]
+    Packages --> UI["shared-ui/@mizan/shared-ui<br/>shadcn 组件库"]
+```
 
 ### 关键设计
 
-- **物理表与元数据分离**：Prisma Schema 仅存储表结构元数据，实际数据表由用户设计并动态创建
-- **文件上传兼容性**：使用 `busboy` 替代标准 `req.formData()`，避免 Node.js 24 下的 multipart 解析兼容问题
-- **异步导入**：上传即返回，导入在后台批处理（每批 500 行），支持进度跟踪
-- **DDL 幂等性**：重新执行 DDL 时先 DROP 旧表再 CREATE，表状态在元数据中维护
-- **分块批量导入**：大数据量导入时分块（每块 500 行）发送，避免请求体超限
-- **物理表缺失自愈**：物理表被误删时自动回退状态为草稿，引导用户重建
-- **查询安全**：视图和脚本执行均有安全校验，拦截危险操作
-- **细粒度权限**：Owner 全权限、非 Owner 通过 TablePermission 逐表授权、ColumnPermission 逐列限制、Admin 全局通行
+- **元数据与物理数据分离** — Prisma 仅管理表结构定义，实际数据表由用户动态创建
+- **异步导入队列** — 文件上传后后台批量处理（每批 500 行），支持并发控制
+- **DDL 幂等执行** — 物理表存在时 ALTER TABLE ADD COLUMN，不存在时 CREATE TABLE
+- **细粒度权限** — Admin → Schema Owner → TablePermission → ColumnPermission 四级管控
 
 ---
 
-## 开发环境配置
+## 应用模块
 
-### 前置要求
+### Core App (主应用)
 
-- Node.js >= 18
-- npm >= 9
+**功能**：仪表盘、Schema 管理、表格定义与 DDL 设计器、数据浏览与编辑、图表可视化、视图/脚本管理、导出模板、导入向导、看板
 
-### 安装与运行
+**端口**：`3000`（开发）
 
-```bash
-# 1. 克隆项目
-git clone <repo-url>
-cd mizan_datasystem
-
-# 2. 安装依赖
-npm install
-
-# 3. 配置环境变量
-# 编辑 .env 文件（已提供默认值，可直接使用）
-DATABASE_URL="file:./dev.db"
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="your-secret-here"
-
-# 4. 初始化数据库
-npx prisma db push
-
-# 5. 启动开发服务器
-npm run dev
-# 访问 http://localhost:3000
+```mermaid
+flowchart LR
+    subgraph Core["Core App 功能"]
+        Schema["Schema 管理"]
+        DDL["DDL 设计器<br/>列/约束/外键/索引"]
+        Data["数据浏览<br/>分页/筛选/编辑"]
+        Chart["图表可视化<br/>8 种图表"]
+        View["视图/脚本/模板"]
+    end
+    Schema --> DDL
+    DDL --> |"执行 DDL"| SQLite[("SQLite")]
+    DDL --> Data
+    Data --> Chart
+    Data --> View
 ```
 
-### 常用命令
+**技术亮点**：
+- DynamicQueryBuilder 参数化 SQL 查询
+- 11 种数据类型 + 约束/外键/索引/触发器
+- 8 种图表类型 (Recharts)
+- 物理表缺失自愈
 
-| 命令 | 说明 |
-|------|------|
-| `npm run dev` | 启动开发服务器 |
-| `npm run build` | 生产构建 |
-| `npm run start` | 启动生产服务器 |
-| `npm run lint` | ESLint 代码检查 |
-| `npm run db:generate` | 重新生成 Prisma Client |
-| `npm run db:migrate` | 运行数据库迁移 |
-| `npm run db:push` | 推送 Schema 变更到数据库 |
-| `npm run db:studio` | 打开 Prisma Studio 管理界面 |
+### Data App (数据管理)
 
-### 使用流程
+**功能**：文件管理（上传/文件夹/标签/分享/预览）、数据收集工具（Excel 在线编辑 → 列选择 → DDL 分析 → 写入）
 
-1. **注册账号** → 访问 `/register` 创建账号
-2. **登录系统** → 使用邮箱和密码登录
-3. **创建 Schema** → 在首页或 Schema 列表页创建数据模型
-4. **导入文件** → 进入 Schema 详情，点击"导入数据"，上传电子表格
-5. **字段映射** → 解析后重命名字段、设置数据类型和主键
-6. **设计表结构** → 进入 DDL 设计器，配置列、约束、外键、索引、触发器
-7. **执行 DDL** → 提交并创建物理数据表
-8. **浏览数据** → 查看表数据，支持分页、排序、搜索、筛选、编辑、删除
-9. **批量导入** → 按货号匹配批量更新/新增数据，后台运行不影响操作
-10. **数据导出** → 将表数据导出为 Excel 或 CSV
-11. **视图/脚本** → 创建 SQL 视图简化查询，编写脚本执行批量操作
-12. **可视化分析** → 切换至图表页面，配置柱状图/折线图/面积图/饼图/散点图/组合图/雷达图/热力图
+**端口**：`3001`（开发）
 
----
+```mermaid
+flowchart LR
+    subgraph Data["Data App 功能"]
+        FM["文件管理<br/>上传/文件夹/标签/分享"]
+        DC["数据收集<br/>Handsontable 在线编辑"]
+        CS["列选择 + DDL 分析"]
+        Import["写入数据库"]
+    end
+    FM --> DC
+    DC --> CS
+    CS --> |"自动建表"| Import
+    Import --> SQLite[("SQLite")]
+```
 
-## 近期更新记录
+**技术亮点**：
+- Handsontable 在线 Excel 编辑（公式/合并/图片/快捷键）
+- 嵌入图片提取 (adm-zip)
+- 自动 DDL 分析 + 类型推导
+- S3 兼容云存储
 
-### Session 1 — Bug 修复与功能增强
+### Pipelines App (ETL 工作流)
 
-#### 修复的 Bug
+**功能**：可视化 Pipeline 编辑器、步骤配置、DAG 执行引擎
 
-| # | 问题 | 原因 | 修复 |
-|---|------|------|------|
-| 1 | Tailwind CSS 编译失败 `require is not defined` | `tailwind.config.ts` 在 ESM 环境下使用 `require()` | 改为 `import tailwindcssAnimate from "tailwindcss-animate"` |
-| 2 | DDL 执行报错 `near ",": syntax error` | `lines.join(",\n")` 在 `CREATE TABLE ... (` 和 `);` 间添加了多余的逗号 | 将表头 `CREATE TABLE ... (` 和结尾 `);` 移出 join 范围 |
-| 3 | DDL 执行报错 `has more than one primary key` | `_id` 列定义含 `PRIMARY KEY`，又额外添加 `PRIMARY KEY ("_id")` 约束 | 移除冗余的 `PRIMARY KEY ("_id")` |
-| 4 | "新增行"按钮无反应 | 按钮缺少 `onClick` 事件绑定 | 实现 `AddRowDialog` 组件，包含表单输入和数据提交 |
-| 5 | 页面无样式（CSS 404） | 旧 Node 进程残留占用端口，新进程使用其他端口 | 进程清理 + 端口释放 |
-| 6 | 批量导入 `Unexpected end of form` | FormData + busboy multipart 上传在 Next.js App Router 下流处理兼容问题 | 改为客户端解析文件 + 分块 JSON 请求（每块 500 行） |
-| 7 | 批量导入大文件 `Unterminated string in JSON` | JSON 请求体超过 Next.js body 大小限制 | 分块发送 + 实时进度显示 |
+**端口**：`3002`（开发）
 
-#### 新增功能
+```mermaid
+flowchart LR
+    subgraph Pipeline["Pipelines App 功能"]
+        Canvas["React Flow 画布<br/>拖拽/连线/缩放"]
+        Steps["步骤配置<br/>7 种步骤类型"]
+        Engine["DAG 执行引擎<br/>拓扑排序"]
+        Output["中间表管道<br/>mzan_pipe_*"]
+    end
+    Canvas --> Steps
+    Steps --> Engine
+    Engine --> Output
+    Output --> SQLite[("SQLite")]
+```
 
-| 功能 | 文件 | 说明 |
-|------|------|------|
-| **Combobox 组件** | `src/components/ui/combobox.tsx` | 可输入的下拉选择器，基于 Popover + Input，支持搜索过滤和自定义输入 |
-| **Popover 组件** | `src/components/ui/popover.tsx` | 弹出卡片容器，Combobox 的基础组件 |
-| **字段映射步骤** | `src/components/import-wizard/step-column-mapping.tsx` | 导入向导中新增"字段映射"步骤，可编辑字段名、类型、主键、非空约束 |
-| **批量导入 API** | `src/app/api/tables/[tableId]/batch-import/route.ts` | 按货号匹配的批量导入接口，支持新增和更新操作 |
-| **批量导入对话框** | `src/components/data/batch-import-dialog.tsx` | 上传文件 → 预览 → 选择匹配字段 → 后台导入 |
-| **后台导入状态管理** | `src/stores/batch-import-store.ts` | Zustand 全局状态管理，跟踪所有后台导入任务的进度和结果 |
-| **浮动进度指示器** | `src/components/data/batch-import-progress.tsx` | 固定在右下角的导入进度卡片，包含进度条和统计数据 |
-| **全局进度组件** | `src/components/layout/global-progress.tsx` | 将进度指示器挂载到 Dashboard 布局 |
+**技术亮点**：
+- @xyflow/react (React Flow) 画布
+- 7 种步骤类型：数据源/SQL/合并/筛选/输出
+- DAG 拓扑排序 (Kahn 算法)
+- 中间表管道 (mzan_pipe_*)
 
-#### 功能改进
+### Admin App (管理后台)
 
-| 改进 | 文件 | 说明 |
-|------|------|------|
-| 导入向导支持字段映射 | `src/components/import-wizard/index.tsx` | 向导从 3 步变为 4 步：上传 → 解析 → 映射 → 完成 |
-| 表创建 API 支持列定义 | `src/app/api/schemas/[schemaId]/tables/route.ts` | 创建表时一并创建列定义，接受 `columns` 和 `sourceFile` 参数 |
-| 对话框自适应滚动 | `src/components/ui/dialog.tsx` | 基础 DialogContent 增加 `max-h-[85vh] overflow-y-auto` |
-| 数据工具栏响应式 | `src/components/data/dynamic-data-table.tsx` | 小屏幕时搜索框和按钮自适应布局 |
+**功能**：用户管理、角色管理 (RBAC)、权限总览、存储设置、数据同步
 
-### Session 2 — 数据编辑、筛选、导出、图表增强、视图/脚本
+**端口**：`3003`（开发）
 
-#### 新增功能
-
-| 功能 | 核心文件 | 说明 |
-|------|----------|------|
-| **表数据编辑** | `dynamic-data-table.tsx` | 双击单元格内联编辑，Enter 保存/Esc 取消 |
-| **行级删除** | `dynamic-data-table.tsx` | 每行删除按钮 + 确认对话框 |
-| **批量选择与操作** | `dynamic-data-table.tsx` | 复选框选择行 + 全选，底部固定操作栏（批量删除/批量更新） |
-| **高级数据筛选** | `filter-dialog.tsx` | 可视化筛选器：11 种操作符，AND/OR 逻辑，活跃筛选标签条 |
-| **数据导出** | `export/route.ts` | 导出 Excel (.xlsx) 和 CSV (.csv)，含 BOM、自动列宽、逻辑名列头 |
-| **导入进度通知** | `sonner.tsx` + `batch-import-progress.tsx` | sonner toast，完成/失败时弹出，含统计信息 |
-| **高级图表** | `chart-container.tsx` | 散点图（颜色分组）、组合图（双轴）、雷达图、热力图（SVG 色阶） |
-| **视图管理** | `view-editor.tsx` + views API | 保存 SELECT 为视图，执行 CREATE VIEW，支持预览/编辑/删除 |
-| **自定义脚本** | `script-editor.tsx` + scripts API | 保存 SQL 脚本按需执行，自动识别查询/变更，显示结果集 |
-| **物理表缺失自愈** | `data/route.ts` | 物理表被误删时自动回退状态为 DRAFT + 引导重建 |
-
-#### 新增文件
-
-| 文件 | 说明 |
-|------|------|
-| `src/components/ui/sonner.tsx` | Toast 通知组件 |
-| `src/components/ui/alert-dialog.tsx` | 确认对话框组件 |
-| `src/components/ui/textarea.tsx` | 多行文本输入组件 |
-| `src/components/data/filter-dialog.tsx` | 数据筛选对话框 + 筛选标签条 |
-| `src/components/schema/view-editor.tsx` | 视图编辑器（增/删/改/执行/预览） |
-| `src/components/schema/script-editor.tsx` | 脚本编辑器（增/删/改/执行/结果） |
-| `src/app/api/query/route.ts` | 通用查询 API（仅 SELECT） |
-| `src/app/api/schemas/[id]/views/route.ts` | 视图列表/创建 API |
-| `src/app/api/schemas/[id]/views/[vid]/route.ts` | 视图详情/更新/删除 API |
-| `src/app/api/schemas/[id]/views/[vid]/execute/route.ts` | 视图执行 API（CREATE VIEW） |
-| `src/app/api/schemas/[id]/scripts/route.ts` | 脚本列表/创建 API |
-| `src/app/api/schemas/[id]/scripts/[sid]/route.ts` | 脚本详情/更新/删除 API |
-| `src/app/api/schemas/[id]/scripts/[sid]/execute/route.ts` | 脚本执行 API |
-| `src/app/api/tables/[id]/export/route.ts` | 数据导出 API |
-
-#### 修复的 Bug
-
-| 问题 | 原因 | 修复 |
-|------|------|------|
-| 批量导入字段不匹配 | 匹配时只查物理名不查逻辑名 | 同时匹配 `physicalName` 和 `logicalName` |
-| 删除 Schema 外键约束失败 | Schema 表的关联缺少 `onDelete: Cascade` | 手动级联删除 FK/ImportJob/TableDefinition |
-| 批量更新列名为空 | 纯中文列名被正则 `[^a-z0-9_]` 过滤为空 | CJK 字符保留 + 空列名校验 |
-
-#### 新增依赖
-
-- `sonner` — Toast 通知库
-
-### Session 3 — DDL 执行优化、导出模板增强
-
-#### 修复的 Bug
-
-| 问题 | 原因 | 修复 |
-|------|------|------|
-| DDL 执行导致数据丢失 | 每次执行 DROP TABLE + CREATE TABLE，销毁所有数据 | 物理表存在时改用 `ALTER TABLE ADD COLUMN` 追加新字段，保留数据 |
-| DDL 新增字段不显示 | API 只保存执行前从 DB 读取的旧字段元数据，新增字段未被持久化 | 将完整列定义从设计器发送到 API，全量替换元数据 |
-| 按模板导出 `{col:仓库名称}` 未识别 | 变量解析只查物理名，用户输入的是逻辑名 | 同时匹配物理名和逻辑名 |
-| 导出文件名未使用自定义模板 | `Content-Disposition` 使用非标准编码，浏览器降级为默认名 | 改为 RFC 5987 标准格式 `filename*=UTF-8''` |
-
-#### 新增功能
-
-| 功能 | 文件 | 说明 |
-|------|------|------|
-| **导出模板样式配置** | `export-template-editor.tsx` | 表头位置（顶部/左侧）、公司 Logo 上传（base64 存储）、工作表名自定义 |
-| **导出文件名字段变量** | `export/route.ts` | `{col:字段名}` 变量从数据第一行取值，支持物理名和逻辑名 |
-| **导出数据源选择** | `export-template-editor.tsx` | 导出向导可选任意数据表，不再限定当前表 |
-| **导出数据筛选** | `export/route.ts` + `export-template-editor.tsx` | 导出前可按 11 种操作符过滤数据 |
-| **exceljs 集成** | `export/route.ts` | 替代 xlsx 生成 Excel，支持样式（字体/填充/边框）、图片嵌入、自动筛选 |
-| **DDL 智能执行** | `execute/route.ts` | 物理表存在时自动检测并 ALTER TABLE ADD COLUMN，保留数据 |
-
-#### 修改文件
-
-| 文件 | 改动 |
-|------|------|
-| `src/app/api/tables/[tableId]/execute/route.ts` | 重写：ALTER TABLE 替代 DROP+CREATE，全量替换列元数据 |
-| `src/components/ddl-designer/index.tsx` | DDL 执行请求增加 columns/indexes/foreignKeys/triggers 完整定义 |
-| `src/app/api/schemas/[schemaId]/templates/[templateId]/export/route.ts` | 改用 exceljs 生成 Excel，`{col:xxx}` 双名匹配，RFC 5987 文件名编码 |
-| `src/components/schema/export-template-editor.tsx` | 新增样式配置、Logo 上传、数据源选择、筛选面板 |
-| `src/app/api/tables/[tableId]/export/route.ts` | Content-Disposition 改为 RFC 5987 标准 |
-
-### Session 4 — 权限管理、超级管理员、API 文档、Bug 修复
-
-#### 新增功能
-
-| 功能 | 核心文件 | 说明 |
-|------|----------|------|
-| **表级权限** | `permissions.ts` + `permission-dialog.tsx` | SELECT/INSERT/UPDATE/DELETE 独立控制，Owner 全权限 |
-| **列级权限** | `permissions.ts` + `permission-dialog.tsx` | READ/WRITE 控制，展开式 UI 配置 |
-| **超级管理员** | `permissions.ts` + schema/table API | `role: ADMIN` 可访问和操作所有数据 |
-| **自动 API 文档** | `api-docs/route.ts` + `api-docs/page.tsx` | 基于表结构自动生成 RESTful API 文档 |
-| **数据表分页调整** | `use-table-data.ts` + `dynamic-data-table.tsx` | 每页条数可选 10/20/50/100/200 |
-
-#### 新增/修改模型
-
-| 模型 | 类型 | 说明 |
-|------|------|------|
-| `User.role` | 新增字段 | `USER`（默认）/ `ADMIN`，控制系统级访问 |
-| `TablePermission` | 新增模型 | 用户-表级权限（tableId + userId 唯一） |
-| `ColumnPermission` | 新增模型 | 列级 READ/WRITE 控制 |
-
-#### 修复的 Bug
-
-| 问题 | 原因 | 修复 |
-|------|------|------|
-| 文件上传流处理不可靠 | Web ReadableStream 手动逐字节读取无背压处理 | `Readable.fromWeb()` + `.pipe(busboy)` |
-| 列物理名冲突导致表创建失败 | 列名转写后可能产生相同 physicalName | `usedPhysNames` Set 跟踪，重复追加 `_2`/`_3` 后缀 |
-| 导入向导表名冲突流程卡死 | API 返回 409 但前端无处理 | 自动以 `表名 (2)(3)` 重试 + 错误 UI 展示 |
-| Next.js Middleware 拦截大文件上传 | 缺少 `middlewareClientMaxBodySize` | 添加配置与 serverActions 一致 |
+**技术亮点**：
+- 表级 + 列级权限控制
+- 超级管理员 (ADMIN 角色)
+- 外部 API 同步引擎
 
 ---
 
-## 后续优化计划
+## 部署方式
 
-### 短期优化
+### 环境要求
 
-- [ ] **注册验证码**：增加邮箱验证码或图形验证码
-- [ ] **DDL 版本管理**：每次 DDL 执行保存版本历史，支持回滚
-- [x] **设定导出模版**: 按照数据模型数据源，自定义高自由的导出模板，导出路径和名称，可以添加图片，导出类型等，并且可以对模板进行修改和保存，之后选择数据愿支持按照模板导出
-- [] **定义用户profile**: 可以修改自己的邮箱、密码、图片
+- Node.js >= 18 + pnpm >= 9
 
-### 中期规划
+### 本地开发
 
-- [ ] **多数据库支持**：除 SQLite 外支持 MySQL、PostgreSQL 作为数据源
-- [ ] **数据表分区**：支持表分区定义（范围分区、列表分区等）
-- [ ] **数据关联查询**：基于外键关系的跨表联查
-- [x] **权限管理**：表级、列级的细粒度访问控制 ✔
-- [x] **API 文档自动生成**：基于表结构自动生成 RESTful API ✔
-- [ ] **用户管理、角色管理、权限管理**: 新增用户管理、角色管理、权限管理模块
-- [ ] **图片处理**: 关联本地路径 或 云存储路径 对图片进行管理
-- [ ] **图片导出**: 
-### 长期愿景
+```bash
+# 安装依赖
+pnpm install
 
-- [ ] **AI 辅助设计**：自然语言描述需求，AI 自动生成表结构和 DDL
-- [ ] **数据同步**：支持与外部数据库/API 双向数据同步
-- [ ] **数据质量监控**：设置数据质量规则，异常数据自动告警
-- [ ] **协作编辑**：多人同时对同一个 Schema 进行设计
-- [ ] **插件生态**：提供插件 API，支持社区扩展
-- [ ] **部署模板**：提供 Docker Compose / 云原生一键部署方案
-- [ ]
----
+# 初始化数据库
+pnpm db:push
 
-## 需要改进点
-- [ ] 增加文件管理，点开选择文件路径，支持本地文件或云存储
-- [ ] 新建导出模板增加选择数据表功能
-- [ ] 导出模板支持解析图片url，并插入图片、而且支持加入自定义列。比如原本有装箱量和最低起订量字段 用户可以自定义导出列并输入公式计算出起订箱数等
-- [ ] 导入过程如果再加导入，把后面的导入放到队列，不影响先前导入。也可以指定最同时多导入的线程，支持同步导入。
-- [ ] 分页目前有bug，显示不出来，需要修改。
+# 启动主应用
+pnpm dev
+# → 启动 @mizan/app-core :3000
 
-## 技术备注
+# 启动子应用 (独立端口)
+pnpm --filter @mizan/app-data dev       # :3001
+pnpm --filter @mizan/app-pipelines dev   # :3002
+pnpm --filter @mizan/app-admin dev       # :3003
+```
 
-### 已知注意事项
+### Docker 部署 (单应用)
 
-- 系统使用 SQLite 作为元数据存储和数据存储的数据库，适合单机/小团队使用
-- 文件上传基于 `busboy` 流式解析，避免大文件内存溢出
-- DDL 生成器当前仅支持 SQLite 方言，扩展其他数据库需修改 `ddl-generator.ts` 和 `type-mapper.ts`
-- 动态数据查询使用 `DynamicQueryBuilder` 生成参数化 SQL，防止 SQL 注入
-- 所有 API 路由均进行用户身份验证和 Schema/Table 归属权校验
-- 批量导入采用分块策略（每块 500 行），避免单个请求体过大
-- 后台导入状态存储在客户端 Zustand store 中，页面切换不丢失
-- 物理表缺失时会自动检测并引导用户重新执行 DDL
-- 权限检查分级：Admin → Schema Owner → TablePermission → ColumnPermission，逐级降权
+每个应用可独立构建和部署。以 Core 为例：
+
+```bash
+# 构建 Core App 镜像
+docker build -f apps/core/Dockerfile -t mizan-core .
+
+# 运行
+docker run -d -p 3000:3000 \
+  -v mizan-data:/app/packages/database/prisma/dev.db \
+  -v mizan-uploads:/app/public/uploads \
+  -e NEXTAUTH_URL="http://your-domain:3000" \
+  -e NEXTAUTH_SECRET="your-secret" \
+  mizan-core
+```
+
+### Docker Compose (全应用)
+
+使用 `docker-compose.yml` 一键启动所有应用及反向代理：
+
+```bash
+docker-compose up -d
+```
+
+### 跨 Zone 路由 (Multi-Zones)
+
+生产环境通过 Nginx 反向代理组合各应用：
+
+```mermaid
+graph LR
+    User["用户"] --> Nginx["Nginx Gateway<br/>mizan.com"]
+    Nginx --> |"/"| Core["Core App<br/>port 3000"]
+    Nginx --> |"/files/*"| Data["Data App<br/>port 3001"]
+    Nginx --> |"/schemas/*/pipelines/*"| Pipelines["Pipelines App<br/>port 3002"]
+    Nginx --> |"/settings/*"| Admin["Admin App<br/>port 3003"]
+    Core --> DB[("SQLite")]
+    Data --> DB
+    Pipelines --> DB
+    Admin --> DB
+```
+
+```nginx
+upstream core       { server 127.0.0.1:3000; }
+upstream data       { server 127.0.0.1:3001; }
+upstream pipelines  { server 127.0.0.1:3002; }
+upstream admin      { server 127.0.0.1:3003; }
+
+server {
+  listen 80;
+  client_max_body_size 50M;
+  location /                     { proxy_pass http://core; }
+  location /files/               { proxy_pass http://core; }
+  location ~ ^/schemas/[^/]+/pipelines/  { proxy_pass http://pipelines; }
+  location /settings/            { proxy_pass http://admin; }
+}
+```
 
 ### 环境变量
 
-| 变量名 | 说明 | 默认值 |
-|--------|------|--------|
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
 | `DATABASE_URL` | SQLite 数据库路径 | `file:./dev.db` |
 | `NEXTAUTH_URL` | NextAuth 回调 URL | `http://localhost:3000` |
-| `NEXTAUTH_SECRET` | JWT 加密密钥 | 需自定义 |
-| `UPLOAD_DIR` | 上传文件存储目录 | `./public/uploads` |
+| `NEXTAUTH_SECRET` | JWT 加密密钥 | 必填 |
+| `UPLOAD_DIR` | 上传文件目录 | `./public/uploads` |
+| `STORAGE_TYPE` | 存储 | `local` / `s3` |
+| `IMPORT_MAX_CONCURRENCY` | 最大并发导入数 | `2` |
 
 ---
 
-## 近期更新
+## 模块功能详情
 
-### 2026-06-02
+### 数据收集与导入
+- Handsontable 在线 Excel 预览（编辑/公式/合并/图片）
+- 交互式列选择 → 自动 DDL 分析 → 创建表 → 写入数据
+- 异步后台导入，排队 + 并发控制
 
-- **文件管理**：全新文件管理页面，支持上传/删除/文件夹/标签/分页
-- **存储抽象**：支持 S3 兼容云存储（MinIO/AWS S3），`STORAGE_TYPE` 环境变量切换
-- **通知系统**：铃铛图标实时提醒，文件/表权限变更自动通知目标用户
-- **文件分享**：分享给其他用户，被分享者可查看和下载
-- **个人资料**：头像上传、姓名/简介编辑 `/profile`
-- **导出模板增强**：图片嵌入、计算列、静态列、行高/字号/颜色/对齐样式设置、合并单元格、实时预览
-- **数据关联查询**：外键列 🔗 标识，点击查看关联数据
-- **数据表标色**：颜色标记快速识别表
-- **模型所有者**：列表和详情页显示创建人和日期
-- **导入队列**：排队机制，`IMPORT_MAX_CONCURRENCY` 控制并发，支持同步模式
-- **超级管理后台**：用户管理、角色管理（RBAC）、权限总览
-- **火箭回顶**：右下角火箭图标，滚动超 300px 显示，点击平滑回顶
-- **权限修复**：跨用户表权限和数据可见性问题修复
-- **分页修复**：数据表分页总数显示（分离 count 查询）
+### 表格设计器 (DDL Designer)
+- 列管理、约束（主键/非空/唯一/自增/CHECK）
+- 外键、索引、触发器
+- SQL 实时预览
 
+### 数据浏览与操作
+- 分页/排序/搜索/筛选（11 种操作符）
+- 内联编辑、批量操作、批量导入 (upsert)
+- 数据导出 (Excel/CSV)
+
+### ETL 工作流
+- React Flow 可视化画布、拖拽节点、动态连线
+- 7 种步骤类型、DAG 拓扑排序执行
+
+### 数据可视化
+- 8 种图表：柱状/折线/面积/饼图/散点/组合/雷达/热力
+
+### 权限与安全
+- 表级 + 列级权限、超级管理员、RBAC
+
+### 其他
+- 文件管理（上传/文件夹/标签/搜索/分享）
+- 视图/脚本管理、导出模板
+- Schema/Dashboard 管理
+- 关联查询、自动 API 文档
+
+---
+
+## 后续计划
+
+### 短期
+- 注册验证码（邮箱/图形）
+- DDL 版本管理与回滚
+- 用户个人资料编辑
+- 跨 Zone 完全拆分
+
+### 中期
+- AI 辅助设计（自然语言 → 表结构）
+- 数据质量监控与告警
+- 协作编辑
+
+### 长期
+- 多数据库支持 (MySQL/PostgreSQL)
+- 插件生态
+- 移动端适配

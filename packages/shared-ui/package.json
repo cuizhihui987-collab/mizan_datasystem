@@ -1,0 +1,57 @@
+{
+  "name": "@mizan/shared-ui",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./button": "./src/button.tsx",
+    "./dialog": "./src/dialog.tsx",
+    "./input": "./src/input.tsx",
+    "./label": "./src/label.tsx",
+    "./select": "./src/select.tsx",
+    "./card": "./src/card.tsx",
+    "./badge": "./src/badge.tsx",
+    "./checkbox": "./src/checkbox.tsx",
+    "./tabs": "./src/tabs.tsx",
+    "./textarea": "./src/textarea.tsx",
+    "./separator": "./src/separator.tsx",
+    "./skeleton": "./src/skeleton.tsx",
+    "./switch": "./src/switch.tsx",
+    "./collapsible": "./src/collapsible.tsx",
+    "./dropdown-menu": "./src/dropdown-menu.tsx",
+    "./popover": "./src/popover.tsx",
+    "./combobox": "./src/combobox.tsx",
+    "./sonner": "./src/sonner.tsx",
+    "./alert-dialog": "./src/alert-dialog.tsx",
+    "./context-menu": "./src/context-menu.tsx"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "class-variance-authority": "*",
+    "lucide-react": "*",
+    "sonner": "*",
+    "@mizan/shared-lib": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  },
+  "peerDependencies": {
+    "@radix-ui/react-alert-dialog": "*",
+    "@radix-ui/react-checkbox": "*",
+    "@radix-ui/react-collapsible": "*",
+    "@radix-ui/react-context-menu": "*",
+    "@radix-ui/react-dialog": "*",
+    "@radix-ui/react-dropdown-menu": "*",
+    "@radix-ui/react-label": "*",
+    "@radix-ui/react-popover": "*",
+    "@radix-ui/react-select": "*",
+    "@radix-ui/react-separator": "*",
+    "@radix-ui/react-slot": "*",
+    "@radix-ui/react-switch": "*",
+    "@radix-ui/react-tabs": "*",
+    "clsx": "*",
+    "tailwind-merge": "*"
+  }
+}

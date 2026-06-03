@@ -1,0 +1,27 @@
+{
+  "name": "@mizan/app-data",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": { "dev": "next dev --port 3001", "build": "next build", "start": "next start --port 3001" },
+  "dependencies": {
+    "next": "^15.2.0", "react": "^19.0.0", "react-dom": "^19.0.0",
+    "next-auth": "^4.24.0", "@tanstack/react-query": "^5.62.0",
+    "zustand": "^5.0.0", "sonner": "^2.0.7", "lucide-react": "*",
+    "handsontable": "*", "@handsontable/react": "*", "xlsx": "*",
+    "adm-zip": "*", "zod": "*", "clsx": "*", "tailwind-merge": "*",
+    "class-variance-authority": "*", "busboy": "*",
+    "@radix-ui/react-dialog": "*", "@radix-ui/react-label": "*",
+    "@radix-ui/react-select": "*", "@radix-ui/react-popover": "*",
+    "@radix-ui/react-checkbox": "*", "@radix-ui/react-slot": "*",
+    "tailwindcss-animate": "*",
+    "@mizan/database": "workspace:*",
+    "@mizan/shared-lib": "workspace:*",
+    "@mizan/shared-ui": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0", "tailwindcss": "^3.4.0",
+    "postcss": "^8.5.0", "autoprefixer": "*",
+    "@types/node": "^22.0.0", "@types/react": "^19.0.0", "@types/react-dom": "^19.0.0",
+    "@types/busboy": "*"
+  }
+}
