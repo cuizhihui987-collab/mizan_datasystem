@@ -49,7 +49,25 @@
       "Bash(sqlite3 prisma/dev.db \"SELECT id, name, email FROM User;\")",
       "Bash(sqlite3 prisma/dev.db \".schema TablePermission\")",
       "Bash(sqlite3 prisma/dev.db \".schema ColumnPermission\")",
-      "Bash(sqlite3 prisma/dev.db \"SELECT id, name FROM Schema;\")"
+      "Bash(sqlite3 prisma/dev.db \"SELECT id, name FROM Schema;\")",
+      "Bash(npx rimraf *)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(taskkill /F /IM node64.exe)",
+      "Bash(del \"node_modules\\\\.prisma\\\\client\\\\query_engine-windows.dll.node\")",
+      "Bash(exist \"node_modules\\\\.prisma\\\\client\\\\query_engine-windows.dll.node\" del /f \"node_modules\\\\.prisma\\\\client\\\\query_engine-windows.dll.node\")",
+      "Bash(npx tsx *)",
+      "Bash(npx -y tsx --version)",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs -r kill -9)",
+      "Bash(rm -rf \"D:\\\\工作\\\\project\\\\mizan_datasystem\\\\.next\")",
+      "Bash(rm \"D:\\\\工作\\\\project\\\\mizan_datasystem\\\\scripts\\\\update-db.ts\")",
+      "Bash(rm -rf \"D:\\\\工作\\\\project\\\\mizan_datasystem\\\\node_modules\\\\.prisma\")",
+      "Bash(gh issue create --title 删除数据表时外键约束导致删除失败 --body ' *)",
+      "Bash(npx *)",
+      "Bash(git config *)",
+      "Bash(rm \"D:\\\\工作\\\\project\\\\mizan_datasystem\\\\scripts\\\\sync-db.ts\")",
+      "Bash(rm \"D:\\\\工作\\\\project\\\\mizan_datasystem\\\\scripts\\\\test-sync.ts\")",
+      "Bash(rm -rf \"D:\\\\工作\\\\project\\\\mizan_datasystem\\\\src\\\\app\\\\api\\\\mock-products\")"
     ]
   },
   "enabledMcpjsonServers": [
