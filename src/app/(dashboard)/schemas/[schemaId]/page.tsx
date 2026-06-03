@@ -28,11 +28,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Table, Trash2, Pencil, FileSpreadsheet, BarChart3, Eye, Terminal, FileDown, BookOpen } from "lucide-react";
+import { ArrowLeft, Plus, Table, Trash2, Pencil, FileSpreadsheet, BarChart3, Eye, Terminal, FileDown, BookOpen, GitBranch, LayoutDashboard } from "lucide-react";
 import { ViewEditor } from "@/components/schema/view-editor";
 import { ScriptEditor } from "@/components/schema/script-editor";
 import { ExportTemplateEditor } from "@/components/schema/export-template-editor";
 import Link from "next/link";
+import { PipelineList } from "@/components/pipeline/pipeline-list";
+import { DashboardList } from "@/components/dashboard/dashboard-list";
 
 interface TableDef {
   id: string;
@@ -210,6 +212,14 @@ export default function SchemaDetailPage() {
             <BookOpen className="h-3.5 w-3.5 mr-1" />
             API 文档
           </TabsTrigger>
+          <TabsTrigger value="pipelines">
+            <GitBranch className="h-3.5 w-3.5 mr-1" />
+            ETL
+          </TabsTrigger>
+          <TabsTrigger value="dashboards">
+            <LayoutDashboard className="h-3.5 w-3.5 mr-1" />
+            看板
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="tables" className="space-y-4">
           <div className="flex justify-end">
@@ -362,6 +372,12 @@ export default function SchemaDetailPage() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="pipelines" className="space-y-4">
+          <PipelineList schemaId={params.schemaId as string} />
+        </TabsContent>
+        <TabsContent value="dashboards" className="space-y-4">
+          <DashboardList schemaId={params.schemaId as string} />
         </TabsContent>
       </Tabs>
       <Dialog open={!!renamingTable} onOpenChange={(open) => { if (!open) setRenamingTable(null); }}>

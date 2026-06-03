@@ -128,6 +128,8 @@ model Schema {
   scripts     CustomScript[]
   templates   ExportTemplate[]
   importJobs  ImportJob[]
+  pipelines   PipelineDefinition[]
+  dashboards  Dashboard[]
 
   @@unique([userId, name])
 }
@@ -157,6 +159,8 @@ model TableDefinition {
   importJobs            ImportJob[]
   tablePermissions      TablePermission[]
   syncConnections       SyncConnection[]
+  pipelineSteps         PipelineStep[]
+  dashboardWidgets      DashboardWidget[]
 
   @@unique([schemaId, logicalName])
 }
@@ -398,6 +402,80 @@ model SyncJob {
   createdAt    DateTime  @default(now())
 
   connection SyncConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+
+// ─── Pipeline (ETL Workflow) ──────────────────────────
+
+// PipelineDefinition: A named ETL pipeline/workflow under a schema
+model PipelineDefinition {
+  id          String   @id @default(cuid())
+  schemaId    String
+  name        String
+  description String?
+  status      String   @default("DRAFT") // DRAFT, ACTIVE, RUNNING, COMPLETED, FAILED, ARCHIVED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  schema Schema         @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+  steps  PipelineStep[]
+
+  @@unique([schemaId, name])
+}
+
+// PipelineStep: An ordered step within a pipeline, each producing an intermediate table
+model PipelineStep {
+  id                 String   @id @default(cuid())
+  pipelineId         String
+  stepOrder          Int      @default(0)
+  stepType           String   // source_import, source_table, source_api, transform_sql, transform_merge, transform_filter, output_table
+  label              String?
+  config             String   @default("{}") // JSON: type-specific configuration
+  sourceTableId      String?
+  outputPhysicalName String   // mzan_pipe_<cuid>
+  status             String   @default("PENDING") // PENDING, RUNNING, COMPLETED, FAILED
+  errorLog           String?  // JSON array of errors
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  pipeline    PipelineDefinition @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  sourceTable TableDefinition?   @relation(fields: [sourceTableId], references: [id])
+
+  @@unique([pipelineId, stepOrder])
+}
+
+// ─── Dashboard ───────────────────────────────────────
+
+// Dashboard: A named dashboard/kanban board under a schema
+model Dashboard {
+  id        String   @id @default(cuid())
+  schemaId  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  schema  Schema             @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+  widgets DashboardWidget[]
+}
+
+// DashboardWidget: A single chart widget on a dashboard
+model DashboardWidget {
+  id          String   @id @default(cuid())
+  dashboardId String
+  title       String?
+  tableId     String?
+  chartType   String   @default("bar")
+  config      String   @default("{}") // JSON: { xAxis, yAxis[], aggregation, stacked, sortBy, ... }
+  positionX   Int      @default(0)
+  positionY   Int      @default(1)
+  width       Int      @default(6)
+  height      Int      @default(4)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dashboard Dashboard    @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  table     TableDefinition? @relation(fields: [tableId], references: [id])
 }
 
 // ─── Notifications ───────────────────────────────────

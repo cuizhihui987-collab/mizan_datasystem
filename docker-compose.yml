@@ -1,0 +1,19 @@
+services:
+  mizan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mizan-datasystem
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.production
+    volumes:
+      # Persist SQLite database and uploads
+      - mizan-data:/app/prisma
+      - mizan-uploads:/app/public/uploads
+    restart: unless-stopped
+
+volumes:
+  mizan-data:
+  mizan-uploads:

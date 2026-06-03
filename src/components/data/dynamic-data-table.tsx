@@ -464,6 +464,13 @@ export function DynamicDataTable({ tableId }: DynamicDataTableProps) {
         onClear={() => setFilters(undefined)}
       />
 
+      {/* Total count bar */}
+      {data && !isLoading && (
+        <div className="text-sm text-muted-foreground">
+          共 <span className="font-medium text-foreground">{total}</span> 条数据
+        </div>
+      )}
+
       {/* Data Table */}
       {isLoading ? (
         <div className="space-y-2">
