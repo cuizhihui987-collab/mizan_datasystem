@@ -20,6 +20,10 @@
     "db:migrate": "cd packages/database && npx prisma migrate dev",
     "db:push": "cd packages/database && npx prisma db push",
     "db:studio": "cd packages/database && npx prisma studio",
+    "test": "turbo run test",
+    "test:core": "pnpm --filter @mizan/app-core test",
+    "test:shared-ui": "pnpm --filter @mizan/shared-ui test",
+    "test:shared-lib": "pnpm --filter @mizan/shared-lib test",
     "postinstall": "cd packages/database && npx prisma generate"
   },
   "dependencies": {
@@ -30,6 +34,9 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@handsontable/react": "^16.2.0",
     "@hookform/resolvers": "^3.9.0",
+    "@mizan/database": "workspace:*",
+    "@mizan/shared-lib": "workspace:*",
+    "@mizan/shared-ui": "workspace:*",
     "@prisma/client": "^6.5.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.0",
@@ -71,13 +78,13 @@
     "tailwindcss-animate": "^1.0.7",
     "xlsx": "^0.18.5",
     "zod": "^3.24.0",
-    "zustand": "^5.0.0",
-    "@mizan/database": "workspace:*",
-    "@mizan/shared-lib": "workspace:*",
-    "@mizan/shared-ui": "workspace:*"
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.0.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/adm-zip": "^0.5.8",
     "@types/bcryptjs": "^2.4.6",
     "@types/busboy": "^1.5.4",
@@ -85,13 +92,18 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/react-grid-layout": "^1.3.6",
+    "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/coverage-v8": "^4.1.8",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.2.0",
+    "jsdom": "^29.1.1",
+    "msw": "^2.14.6",
     "postcss": "^8.5.0",
     "prisma": "^6.5.0",
     "tailwindcss": "^3.4.0",
     "tsx": "^4.22.4",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.8"
   }
 }

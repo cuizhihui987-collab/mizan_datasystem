@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
-    "start": "next start --port 3000"
+    "start": "next start --port 3000",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "next": "^15.2.0",
@@ -59,7 +62,8 @@
     "@radix-ui/react-tooltip": "*",
     "@mizan/database": "workspace:*",
     "@mizan/shared-lib": "workspace:*",
-    "@mizan/shared-ui": "workspace:*"
+    "@mizan/shared-ui": "workspace:*",
+    "@mizan/test-config": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

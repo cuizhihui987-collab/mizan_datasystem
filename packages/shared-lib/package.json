@@ -17,6 +17,11 @@
     "next-auth": "^4.24.0",
     "react": "^19.0.0"
   },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
   "devDependencies": {
     "typescript": "^5.7.0"
   }

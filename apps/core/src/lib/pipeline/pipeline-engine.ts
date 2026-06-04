@@ -28,7 +28,7 @@ interface ExecutionResult {
   error?: string;
 }
 
-function generatePhysicalName(): string {
+export function generatePhysicalName(): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
   let result = "mzan_pipe_";
   for (let i = 0; i < 10; i++) {
@@ -37,11 +37,11 @@ function generatePhysicalName(): string {
   return result;
 }
 
-function safeIdentifier(name: string): string {
+export function safeIdentifier(name: string): string {
   return name.replace(/[^a-z0-9_一-龿]/gi, "").replace(/"/g, "");
 }
 
-function isSQLSafe(sql: string): string | null {
+export function isSQLSafe(sql: string): string | null {
   const upper = sql.toUpperCase().trim();
   if (!upper.startsWith("SELECT") && !upper.startsWith("WITH") && !upper.startsWith("VALUES")) {
     return "仅允许 SELECT / WITH 查询";

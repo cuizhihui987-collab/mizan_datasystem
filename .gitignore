@@ -48,6 +48,7 @@ next-env.d.ts
 
 # ─── Testing ─────────────────────────────────────────
 /coverage
+.test-db/
 
 # ─── Database (SQLite) ───────────────────────────────
 prisma/dev.db

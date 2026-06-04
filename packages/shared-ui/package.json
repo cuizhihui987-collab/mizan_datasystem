@@ -30,7 +30,13 @@
     "class-variance-authority": "*",
     "lucide-react": "*",
     "sonner": "*",
-    "@mizan/shared-lib": "workspace:*"
+    "@mizan/shared-lib": "workspace:*",
+    "@mizan/test-config": "workspace:*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

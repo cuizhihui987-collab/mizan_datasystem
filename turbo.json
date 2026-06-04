@@ -30,6 +30,16 @@
     "db:generate": {
       "cache": false
     },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"],
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "test/**/*", "vitest.config.ts"]
+    },
+    "test:e2e": {
+      "dependsOn": ["build"],
+      "outputs": [],
+      "persistent": false
+    },
     "db:push": {
       "cache": false,
       "dependsOn": ["db:generate"]

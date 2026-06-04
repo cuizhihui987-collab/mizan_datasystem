@@ -571,6 +571,11 @@ export const stepTypeMeta: Record<string, StepTypeMeta> = {
   },
 
   // ── 新增转换 ──
+  transform_filter: {
+    label: "筛选数据",
+    description: "按条件对上一步数据进行过滤",
+    group: "transform",
+  },
   transform_aggregate: {
     label: "聚合计算",
     description: "对数据进行分组聚合（GROUP BY）",
@@ -584,6 +589,21 @@ export const stepTypeMeta: Record<string, StepTypeMeta> = {
   transform_deduplicate: {
     label: "去重",
     description: "根据指定列去除重复行",
+    group: "transform",
+  },
+  transform_sort: {
+    label: "排序",
+    description: "按指定字段对数据进行排序",
+    group: "transform",
+  },
+  transform_union: {
+    label: "UNION 合并",
+    description: "将多个数据源合并为一张表",
+    group: "transform",
+  },
+  transform_custom_script: {
+    label: "自定义脚本",
+    description: "通过 Python/JS 脚本实现自定义转换逻辑",
     group: "transform",
   },
   transform_custom_script: {

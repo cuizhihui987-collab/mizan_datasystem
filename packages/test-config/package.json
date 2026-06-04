@@ -1,0 +1,19 @@
+{
+  "name": "@mizan/test-config",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./base": "./vitest.base.ts",
+    "./dom": "./vitest.dom.ts",
+    "./test-factory": "./src/test-factory.ts",
+    "./session-mock": "./src/session-mock.ts",
+    "./prisma-test": "./src/prisma-test-client.ts"
+  },
+  "main": "vitest.base.ts",
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.8",
+    "prisma": "^6.5.0",
+    "@prisma/client": "^6.5.0"
+  }
+}
